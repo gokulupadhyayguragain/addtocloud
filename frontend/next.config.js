@@ -1,8 +1,5 @@
 ﻿/** @type {import('next').NextConfig} */
 const nextConfig = {
-  experimental: {
-    appDir: true,
-  },
   images: {
     domains: ['via.placeholder.com', 'images.unsplash.com'],
   },
@@ -13,7 +10,7 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: process.env.NEXT_PUBLIC_API_URL + '/:path*',
+        destination: 'http://localhost:8080/api/:path*',
       },
     ];
   },

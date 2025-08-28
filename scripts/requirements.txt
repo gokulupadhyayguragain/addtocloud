@@ -1,0 +1,10 @@
+# Python dependencies for AddToCloud deployment scripts
+pyyaml==6.0.1
+requests==2.31.0
+kubernetes==28.1.0
+docker==6.1.3
+click==8.1.7
+colorama==0.4.6
+python-dotenv==1.0.0
+jinja2==3.1.2
+prometheus-client==0.19.0

@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "addtocloud-frontend",
   "version": "1.0.0",
   "private": true,
@@ -48,11 +48,8 @@
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
     "@testing-library/react": "^13.4.0",
-    "@testing-library/jest-dom": "^6.1.0"
-  },
-  "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
+    "@testing-library/jest-dom": "^6.1.0",
+    "typescript": "^5.2.0"
   },
   "browserslist": {
     "production": [
@@ -65,5 +62,9 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   }
 }
