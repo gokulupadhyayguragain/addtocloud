@@ -57,4 +57,4 @@ export const CLOUD_PROVIDERS = {
   AWS: 'aws',
   AZURE: 'azure',
   GCP: 'gcp',
-} as const;
+};

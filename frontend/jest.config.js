@@ -9,7 +9,7 @@ const createJestConfig = nextJest({
 const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleNameMapping: {
-    // Handle module aliases (this will be automatically configured for you based on your tsconfig.json paths)
+    // Handle module aliases
     '^@/components/(.*)$': '<rootDir>/components/$1',
     '^@/pages/(.*)$': '<rootDir>/pages/$1',
     '^@/lib/(.*)$': '<rootDir>/lib/$1',
@@ -17,16 +17,14 @@ const customJestConfig = {
     '^@/hooks/(.*)$': '<rootDir>/hooks/$1',
     '^@/context/(.*)$': '<rootDir>/context/$1',
     '^@/styles/(.*)$': '<rootDir>/styles/$1',
-    '^@/types/(.*)$': '<rootDir>/types/$1',
   },
   testEnvironment: 'jest-environment-jsdom',
   collectCoverageFrom: [
-    'components/**/*.{js,jsx,ts,tsx}',
-    'pages/**/*.{js,jsx,ts,tsx}',
-    'lib/**/*.{js,jsx,ts,tsx}',
-    'utils/**/*.{js,jsx,ts,tsx}',
-    'hooks/**/*.{js,jsx,ts,tsx}',
-    '!**/*.d.ts',
+    'components/**/*.{js,jsx}',
+    'pages/**/*.{js,jsx}',
+    'lib/**/*.{js,jsx}',
+    'utils/**/*.{js,jsx}',
+    'hooks/**/*.{js,jsx}',
     '!**/node_modules/**',
   ],
 }

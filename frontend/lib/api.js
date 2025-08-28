@@ -1,5 +1,8 @@
 import axios from 'axios';
-import { API_BASE_URL } from './constants';
+
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://api.addtocloud.tech' 
+  : 'http://localhost:8080';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
