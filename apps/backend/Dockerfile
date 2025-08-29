@@ -1,5 +1,5 @@
 # Backend Dockerfile - Multi-stage build for Go application
-FROM golang:1.24-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # Install dependencies
 RUN apk add --no-cache git ca-certificates tzdata
