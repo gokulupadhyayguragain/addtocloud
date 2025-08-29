@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: addtocloud
+
+resources:
+- ../../base/namespace.yaml
+- ../../base/configmap.yaml
+- ../../base/secrets.yaml
+- ../../deployments/frontend.yaml
+- ../../deployments/backend.yaml
+- ../../databases/databases.yaml
+- ../../base/ingress.yaml
+- ../../base/hpa.yaml
+
+patchesStrategicMerge:
+- aws-patches.yaml
+
+images:
+- name: addtocloud/frontend
+  newName: 123456789012.dkr.ecr.us-west-2.amazonaws.com/addtocloud/frontend
+  newTag: latest
+- name: addtocloud/backend
+  newName: 123456789012.dkr.ecr.us-west-2.amazonaws.com/addtocloud/backend
+  newTag: latest
+
+commonLabels:
+  cloud-provider: aws
+  environment: production

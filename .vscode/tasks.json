@@ -1,0 +1,58 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start Frontend Dev Server",
+			"type": "shell",
+			"command": "npm run dev",
+			"args": [],
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Start Backend Server",
+			"type": "shell",
+			"command": "go run cmd/main-simple.go",
+			"args": [],
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Build Frontend",
+			"type": "shell",
+			"command": "npm run build",
+			"args": [],
+			"options": {
+				"cwd": "${workspaceFolder}/frontend"
+			},
+			"group": "build"
+		},
+		{
+			"label": "Build Backend",
+			"type": "shell",
+			"command": "go build ./cmd/main.go",
+			"args": [],
+			"options": {
+				"cwd": "${workspaceFolder}/backend"
+			},
+			"group": "build"
+		},
+		{
+			"label": "Start All Services",
+			"dependsOrder": "parallel",
+			"dependsOn": [
+				"Start Frontend Dev Server",
+				"Start Backend Server"
+			],
+			"group": "build"
+		}
+	]
+}

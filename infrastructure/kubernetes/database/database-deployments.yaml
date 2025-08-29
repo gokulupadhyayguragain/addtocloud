@@ -1,0 +1,356 @@
+# PostgreSQL Deployment with Persistent Storage
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgresql-primary
+  namespace: database
+  labels:
+    app: postgresql
+    component: primary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgresql
+      component: primary
+  template:
+    metadata:
+      labels:
+        app: postgresql
+        component: primary
+    spec:
+      serviceAccountName: postgresql-sa
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      
+      containers:
+      - name: postgresql
+        image: postgres:15-alpine
+        imagePullPolicy: Always
+        
+        env:
+        - name: POSTGRES_DB
+          value: "addtocloud"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: username
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgresql-secrets
+              key: password
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        
+        ports:
+        - containerPort: 5432
+          name: postgresql
+        
+        volumeMounts:
+        - name: postgresql-data
+          mountPath: /var/lib/postgresql/data
+        - name: postgresql-config
+          mountPath: /etc/postgresql/postgresql.conf
+          subPath: postgresql.conf
+        - name: logs-volume
+          mountPath: /var/log/postgresql
+        
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - exec pg_isready -U $POSTGRES_USER -d $POSTGRES_DB -h 127.0.0.1 -p 5432
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - exec pg_isready -U $POSTGRES_USER -d $POSTGRES_DB -h 127.0.0.1 -p 5432
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+      
+      volumes:
+      - name: postgresql-data
+        persistentVolumeClaim:
+          claimName: postgresql-data-pvc
+      - name: postgresql-config
+        configMap:
+          name: postgresql-config
+      - name: logs-volume
+        persistentVolumeClaim:
+          claimName: logs-pvc
+
+---
+# MongoDB Deployment with Persistent Storage
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb-primary
+  namespace: database
+  labels:
+    app: mongodb
+    component: primary
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+      component: primary
+  template:
+    metadata:
+      labels:
+        app: mongodb
+        component: primary
+    spec:
+      serviceAccountName: mongodb-sa
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      
+      containers:
+      - name: mongodb
+        image: mongo:7.0
+        imagePullPolicy: Always
+        
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secrets
+              key: username
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secrets
+              key: password
+        - name: MONGO_INITDB_DATABASE
+          value: "addtocloud"
+        
+        ports:
+        - containerPort: 27017
+          name: mongodb
+        
+        volumeMounts:
+        - name: mongodb-data
+          mountPath: /data/db
+        - name: mongodb-config
+          mountPath: /data/configdb
+        - name: logs-volume
+          mountPath: /var/log/mongodb
+        
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "3Gi"
+            cpu: "1500m"
+        
+        livenessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        
+        readinessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+      
+      volumes:
+      - name: mongodb-data
+        persistentVolumeClaim:
+          claimName: mongodb-data-pvc
+      - name: mongodb-config
+        emptyDir: {}
+      - name: logs-volume
+        persistentVolumeClaim:
+          claimName: logs-pvc
+
+---
+# Redis Deployment with Persistent Storage
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-master
+  namespace: database
+  labels:
+    app: redis
+    component: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+      component: master
+  template:
+    metadata:
+      labels:
+        app: redis
+        component: master
+    spec:
+      serviceAccountName: redis-sa
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+      
+      containers:
+      - name: redis
+        image: redis:7.2-alpine
+        imagePullPolicy: Always
+        
+        command:
+        - redis-server
+        - /etc/redis/redis.conf
+        
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: redis-secrets
+              key: password
+        
+        ports:
+        - containerPort: 6379
+          name: redis
+        
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        - name: redis-config
+          mountPath: /etc/redis
+        - name: logs-volume
+          mountPath: /var/log/redis
+        
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 6
+        
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+      
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-data-pvc
+      - name: redis-config
+        configMap:
+          name: redis-config
+      - name: logs-volume
+        persistentVolumeClaim:
+          claimName: logs-pvc
+
+---
+# Database Services
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresql-service
+  namespace: database
+  labels:
+    app: postgresql
+spec:
+  selector:
+    app: postgresql
+    component: primary
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgresql
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-service
+  namespace: database
+  labels:
+    app: mongodb
+spec:
+  selector:
+    app: mongodb
+    component: primary
+  ports:
+  - port: 27017
+    targetPort: 27017
+    name: mongodb
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: database
+  labels:
+    app: redis
+spec:
+  selector:
+    app: redis
+    component: master
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  type: ClusterIP

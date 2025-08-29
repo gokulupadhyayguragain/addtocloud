@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: addtocloud
+
+resources:
+- ../../base/namespace.yaml
+- ../../base/configmap.yaml
+- ../../base/secrets.yaml
+- ../../deployments/frontend.yaml
+- ../../deployments/backend.yaml
+- ../../databases/databases.yaml
+- ../../base/ingress.yaml
+- ../../base/hpa.yaml
+
+patchesStrategicMerge:
+- azure-patches.yaml
+
+images:
+- name: addtocloud/frontend
+  newName: addtocloudacr.azurecr.io/addtocloud/frontend
+  newTag: latest
+- name: addtocloud/backend
+  newName: addtocloudacr.azurecr.io/addtocloud/backend
+  newTag: latest
+
+commonLabels:
+  cloud-provider: azure
+  environment: production

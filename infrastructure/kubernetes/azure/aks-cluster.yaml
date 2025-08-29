@@ -1,0 +1,168 @@
+# Azure AKS Cluster Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aks-cluster-config
+data:
+  main.tf: |
+    # Azure AKS Cluster
+    resource "azurerm_kubernetes_cluster" "addtocloud_aks" {
+      name                = "addtocloud-aks-tertiary"
+      location            = azurerm_resource_group.main.location
+      resource_group_name = azurerm_resource_group.main.name
+      dns_prefix          = "addtocloud-aks"
+      
+      # Kubernetes version
+      kubernetes_version = "1.27.3"
+      
+      # Default node pool
+      default_node_pool {
+        name                = "system"
+        node_count          = 3
+        vm_size             = "Standard_D2s_v3"
+        type                = "VirtualMachineScaleSets"
+        availability_zones  = ["1", "2", "3"]
+        enable_auto_scaling = true
+        min_count          = 2
+        max_count          = 5
+        
+        # Node configuration
+        os_disk_size_gb = 50
+        os_disk_type    = "Managed"
+        
+        # Network configuration
+        vnet_subnet_id = azurerm_subnet.internal.id
+        
+        # Node labels
+        node_labels = {
+          "node-type" = "system"
+          "env"       = "production"
+        }
+        
+        # Node taints
+        node_taints = [
+          "CriticalAddonsOnly=true:NoSchedule"
+        ]
+        
+        tags = {
+          Environment = "production"
+          Project     = "addtocloud"
+        }
+      }
+      
+      # Service Principal
+      service_principal {
+        client_id     = var.client_id
+        client_secret = var.client_secret
+      }
+      
+      # Network profile
+      network_profile {
+        network_plugin    = "azure"
+        network_policy    = "azure"
+        load_balancer_sku = "standard"
+        outbound_type     = "loadBalancer"
+      }
+      
+      # Add-ons
+      addon_profile {
+        oms_agent {
+          enabled                    = true
+          log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+        }
+        
+        azure_policy {
+          enabled = true
+        }
+        
+        http_application_routing {
+          enabled = false
+        }
+        
+        kube_dashboard {
+          enabled = false
+        }
+      }
+      
+      # RBAC
+      role_based_access_control {
+        enabled = true
+        
+        azure_active_directory {
+          managed = true
+          admin_group_object_ids = [var.admin_group_object_id]
+        }
+      }
+      
+      tags = {
+        Environment = "production"
+        Project     = "addtocloud"
+      }
+    }
+    
+    # Additional node pool for applications
+    resource "azurerm_kubernetes_cluster_node_pool" "app_nodes" {
+      name                  = "appnodes"
+      kubernetes_cluster_id = azurerm_kubernetes_cluster.addtocloud_aks.id
+      vm_size               = "Standard_D4s_v3"
+      node_count            = 5
+      availability_zones    = ["1", "2", "3"]
+      enable_auto_scaling   = true
+      min_count            = 3
+      max_count            = 10
+      
+      # Node configuration
+      os_disk_size_gb = 100
+      os_disk_type    = "Managed"
+      
+      # Network
+      vnet_subnet_id = azurerm_subnet.internal.id
+      
+      # Labels and taints
+      node_labels = {
+        "node-type" = "application"
+        "env"       = "production"
+      }
+      
+      tags = {
+        Environment = "production"
+        Project     = "addtocloud"
+        NodeType    = "application"
+      }
+    }
+    
+    # Spot instance node pool for cost optimization
+    resource "azurerm_kubernetes_cluster_node_pool" "spot_nodes" {
+      name                  = "spotnodes"
+      kubernetes_cluster_id = azurerm_kubernetes_cluster.addtocloud_aks.id
+      vm_size               = "Standard_D2s_v3"
+      priority              = "Spot"
+      eviction_policy       = "Delete"
+      spot_max_price        = 0.5 # USD per hour
+      node_count            = 2
+      enable_auto_scaling   = true
+      min_count            = 0
+      max_count            = 5
+      
+      # Node configuration
+      os_disk_size_gb = 50
+      
+      # Network
+      vnet_subnet_id = azurerm_subnet.internal.id
+      
+      # Labels and taints
+      node_labels = {
+        "node-type" = "spot"
+        "env"       = "production"
+      }
+      
+      node_taints = [
+        "spot=true:NoSchedule"
+      ]
+      
+      tags = {
+        Environment = "production"
+        Project     = "addtocloud"
+        NodeType    = "spot"
+      }
+    }

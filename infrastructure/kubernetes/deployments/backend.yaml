@@ -1,0 +1,113 @@
+# Backend Deployment and Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-backend
+  namespace: addtocloud
+  labels:
+    app: addtocloud-backend
+    component: backend
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: addtocloud-backend
+  template:
+    metadata:
+      labels:
+        app: addtocloud-backend
+        component: backend
+        version: v1
+    spec:
+      containers:
+      - name: backend
+        image: addtocloud/backend:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-config
+              key: DATABASE_HOST
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-config
+              key: DATABASE_PORT
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-config
+              key: DATABASE_NAME
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-secrets
+              key: DATABASE_PASSWORD
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-config
+              key: REDIS_PORT
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-secrets
+              key: REDIS_PASSWORD
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-secrets
+              key: JWT_SECRET
+        - name: API_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-secrets
+              key: API_SECRET_KEY
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-config
+              key: ENVIRONMENT
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-backend
+  namespace: addtocloud
+  labels:
+    app: addtocloud-backend
+spec:
+  selector:
+    app: addtocloud-backend
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP

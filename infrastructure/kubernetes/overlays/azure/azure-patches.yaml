@@ -1,0 +1,66 @@
+# Azure-specific patches
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-frontend
+  namespace: addtocloud
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+        beta.kubernetes.io/instance-type: Standard_D2s_v3
+      tolerations:
+      - key: "kubernetes.azure.com/scalesetpriority"
+        operator: "Equal"
+        value: "spot"
+        effect: "NoSchedule"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-backend
+  namespace: addtocloud
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+        beta.kubernetes.io/instance-type: Standard_D4s_v3
+      tolerations:
+      - key: "kubernetes.azure.com/scalesetpriority"
+        operator: "Equal"
+        value: "spot"
+        effect: "NoSchedule"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: addtocloud
+spec:
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: managed-premium
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: addtocloud
+spec:
+  volumeClaimTemplates:
+  - metadata:
+      name: mongodb-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: managed-premium
+      resources:
+        requests:
+          storage: 20Gi

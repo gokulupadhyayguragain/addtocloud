@@ -1,0 +1,70 @@
+# Ingress with SSL/TLS
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: addtocloud-ingress
+  namespace: addtocloud
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "PUT, GET, POST, OPTIONS, DELETE, PATCH"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - addtocloud.tech
+    - www.addtocloud.tech
+    - api.addtocloud.tech
+    secretName: addtocloud-tls
+  rules:
+  - host: addtocloud.tech
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: addtocloud-frontend
+            port:
+              number: 80
+  - host: www.addtocloud.tech
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: addtocloud-frontend
+            port:
+              number: 80
+  - host: api.addtocloud.tech
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: addtocloud-backend
+            port:
+              number: 80
+---
+# SSL Certificate
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: addtocloud-cert
+  namespace: addtocloud
+spec:
+  secretName: addtocloud-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - addtocloud.tech
+  - www.addtocloud.tech
+  - api.addtocloud.tech

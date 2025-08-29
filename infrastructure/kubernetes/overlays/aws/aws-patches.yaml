@@ -1,0 +1,85 @@
+# AWS-specific patches
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-frontend
+  namespace: addtocloud
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+        node.kubernetes.io/instance-type: t3.medium
+      tolerations:
+      - key: "eks.amazonaws.com/capacityType"
+        operator: "Equal"
+        value: "SPOT"
+        effect: "NoSchedule"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-backend
+  namespace: addtocloud
+spec:
+  template:
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+        node.kubernetes.io/instance-type: t3.large
+      tolerations:
+      - key: "eks.amazonaws.com/capacityType"
+        operator: "Equal"
+        value: "SPOT"
+        effect: "NoSchedule"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: addtocloud
+spec:
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: gp3
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: addtocloud
+spec:
+  volumeClaimTemplates:
+  - metadata:
+      name: mongodb-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: gp3
+      resources:
+        requests:
+          storage: 20Gi
+---
+# AWS Load Balancer Controller Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-frontend-nlb
+  namespace: addtocloud
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+spec:
+  type: LoadBalancer
+  selector:
+    app: addtocloud-frontend
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP

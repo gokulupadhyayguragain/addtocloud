@@ -1,0 +1,47 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../base
+
+namespace: addtocloud-staging
+
+namePrefix: staging-
+
+commonLabels:
+  environment: staging
+  stage: staging
+
+patches:
+- path: replica-patch.yaml
+  target:
+    kind: Deployment
+    name: addtocloud-backend
+- path: replica-patch.yaml
+  target:
+    kind: Deployment
+    name: addtocloud-frontend
+
+configMapGenerator:
+- name: addtocloud-config
+  literals:
+  - environment=staging
+  - log-level=info
+  - api-url=https://api-staging.addtocloud.tech
+  - app-url=https://staging.addtocloud.tech
+
+secretGenerator:
+- name: addtocloud-secrets
+  literals:
+  - database-url=postgresql://postgres:staging_password@postgres:5432/addtocloud_staging
+  - redis-url=redis://:staging_password@redis:6379/1
+  - postgres-database=addtocloud_staging
+  - postgres-username=postgres
+  - postgres-password=staging_password
+  - redis-password=staging_password
+
+images:
+- name: addtocloud/backend
+  newTag: staging-latest
+- name: addtocloud/frontend
+  newTag: staging-latest

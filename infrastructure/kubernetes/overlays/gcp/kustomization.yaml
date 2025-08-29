@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: addtocloud
+
+resources:
+- ../../base/namespace.yaml
+- ../../base/configmap.yaml
+- ../../base/secrets.yaml
+- ../../deployments/frontend.yaml
+- ../../deployments/backend.yaml
+- ../../databases/databases.yaml
+- ../../base/ingress.yaml
+- ../../base/hpa.yaml
+
+patchesStrategicMerge:
+- gcp-patches.yaml
+
+images:
+- name: addtocloud/frontend
+  newName: gcr.io/addtocloud-project/frontend
+  newTag: latest
+- name: addtocloud/backend
+  newName: gcr.io/addtocloud-project/backend
+  newTag: latest
+
+commonLabels:
+  cloud-provider: gcp
+  environment: production

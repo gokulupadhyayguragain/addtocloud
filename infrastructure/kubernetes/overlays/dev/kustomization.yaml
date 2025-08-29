@@ -1,0 +1,55 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../base
+
+namespace: addtocloud-dev
+
+namePrefix: dev-
+
+commonLabels:
+  environment: development
+  stage: dev
+
+patches:
+- path: replica-patch.yaml
+  target:
+    kind: Deployment
+    name: addtocloud-backend
+- path: replica-patch.yaml
+  target:
+    kind: Deployment
+    name: addtocloud-frontend
+- path: resources-patch.yaml
+  target:
+    kind: Deployment
+    name: addtocloud-backend
+- path: resources-patch.yaml
+  target:
+    kind: Deployment
+    name: addtocloud-frontend
+
+configMapGenerator:
+- name: addtocloud-config
+  literals:
+  - environment=development
+  - log-level=debug
+  - api-url=https://api-dev.addtocloud.tech
+  - app-url=https://dev.addtocloud.tech
+
+secretGenerator:
+- name: addtocloud-secrets
+  literals:
+  - database-url=postgresql://postgres:password@postgres:5432/addtocloud_dev
+  - redis-url=redis://:password@redis:6379/0
+  - postgres-database=addtocloud_dev
+  - postgres-username=postgres
+  - postgres-password=password
+  - redis-password=password
+
+images:
+- name: addtocloud/backend
+  newTag: dev-latest
+- name: addtocloud/frontend
+  newTag: dev-latest

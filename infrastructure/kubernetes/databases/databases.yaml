@@ -1,24 +1,11 @@
-# PostgreSQL Database Service and Deployment
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres-service
-  namespace: addtocloud
-spec:
-  selector:
-    app: postgres
-  ports:
-    - port: 5432
-      targetPort: 5432
-  type: ClusterIP
-
----
+# PostgreSQL Database
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  name: postgres-deployment
+  name: postgres
   namespace: addtocloud
 spec:
+  serviceName: postgres-service
   replicas: 1
   selector:
     matchLabels:
@@ -30,101 +17,59 @@ spec:
     spec:
       containers:
       - name: postgres
-        image: postgres:15
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
         env:
         - name: POSTGRES_DB
-          value: addtocloud
-        - name: POSTGRES_USER
-          value: addtocloud
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-config
+              key: DATABASE_NAME
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: database-secrets
-              key: postgres-password
-        ports:
-        - containerPort: 5432
+              name: addtocloud-secrets
+              key: DATABASE_PASSWORD
+        - name: POSTGRES_USER
+          value: "addtocloud"
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data
-      volumes:
-      - name: postgres-storage
-        persistentVolumeClaim:
-          claimName: postgres-pvc
-
----
-# MongoDB Service and Deployment
-apiVersion: v1
-kind: Service
-metadata:
-  name: mongodb-service
-  namespace: addtocloud
-spec:
-  selector:
-    app: mongodb
-  ports:
-    - port: 27017
-      targetPort: 27017
-  type: ClusterIP
-
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mongodb-deployment
-  namespace: addtocloud
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: mongodb
-  template:
-    metadata:
-      labels:
-        app: mongodb
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
     spec:
-      containers:
-      - name: mongodb
-        image: mongo:7
-        env:
-        - name: MONGO_INITDB_ROOT_USERNAME
-          value: addtocloud
-        - name: MONGO_INITDB_ROOT_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: database-secrets
-              key: mongodb-password
-        - name: MONGO_INITDB_DATABASE
-          value: addtocloud
-        ports:
-        - containerPort: 27017
-        volumeMounts:
-        - name: mongodb-storage
-          mountPath: /data/db
-      volumes:
-      - name: mongodb-storage
-        persistentVolumeClaim:
-          claimName: mongodb-pvc
-
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
 ---
-# Redis Service and Deployment
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis-service
+  name: postgres-service
   namespace: addtocloud
 spec:
   selector:
-    app: redis
+    app: postgres
   ports:
-    - port: 6379
-      targetPort: 6379
+  - port: 5432
+    targetPort: 5432
   type: ClusterIP
-
 ---
+# Redis Cache
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: redis-deployment
+  name: redis
   namespace: addtocloud
 spec:
   replicas: 1
@@ -138,20 +83,101 @@ spec:
     spec:
       containers:
       - name: redis
-        image: redis:7
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+        command: ["redis-server"]
+        args: ["--requirepass", "$(REDIS_PASSWORD)"]
         env:
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: database-secrets
-              key: redis-password
-        command: ["redis-server", "--requirepass", "$(REDIS_PASSWORD)"]
+              name: addtocloud-secrets
+              key: REDIS_PASSWORD
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: addtocloud
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+  type: ClusterIP
+---
+# MongoDB Database
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: addtocloud
+spec:
+  serviceName: mongodb-service
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:7
         ports:
-        - containerPort: 6379
+        - containerPort: 27017
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          value: "addtocloud"
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-secrets
+              key: MONGODB_PASSWORD
+        - name: MONGO_INITDB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-config
+              key: MONGODB_DATABASE
         volumeMounts:
-        - name: redis-storage
-          mountPath: /data
-      volumes:
-      - name: redis-storage
-        persistentVolumeClaim:
-          claimName: redis-pvc
+        - name: mongodb-storage
+          mountPath: /data/db
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+  volumeClaimTemplates:
+  - metadata:
+      name: mongodb-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-service
+  namespace: addtocloud
+spec:
+  selector:
+    app: mongodb
+  ports:
+  - port: 27017
+    targetPort: 27017
+  type: ClusterIP

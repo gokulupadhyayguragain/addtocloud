@@ -1,0 +1,138 @@
+# GCP GKE Cluster Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gke-cluster-config
+data:
+  cluster.yaml: |
+    # GKE Cluster using Terraform
+    resource "google_container_cluster" "addtocloud_gke" {
+      name     = "addtocloud-gke-secondary"
+      location = "us-central1"
+      
+      # Remove default node pool
+      remove_default_node_pool = true
+      initial_node_count       = 1
+      
+      # Network configuration
+      network    = google_compute_network.vpc.name
+      subnetwork = google_compute_subnetwork.subnet.name
+      
+      # Cluster features
+      enable_autopilot = false
+      
+      # Workload Identity
+      workload_identity_config {
+        workload_pool = "${var.project_id}.svc.id.goog"
+      }
+      
+      # Network policy
+      network_policy {
+        enabled = true
+      }
+      
+      # Add-ons
+      addons_config {
+        http_load_balancing {
+          disabled = false
+        }
+        
+        horizontal_pod_autoscaling {
+          disabled = false
+        }
+        
+        network_policy_config {
+          disabled = false
+        }
+        
+        istio_config {
+          disabled = false
+          auth     = "AUTH_MUTUAL_TLS"
+        }
+      }
+      
+      # Master auth
+      master_auth {
+        client_certificate_config {
+          issue_client_certificate = false
+        }
+      }
+    }
+    
+    # Primary node pool
+    resource "google_container_node_pool" "primary_nodes" {
+      name       = "primary-node-pool"
+      location   = "us-central1"
+      cluster    = google_container_cluster.addtocloud_gke.name
+      node_count = 3
+      
+      node_config {
+        preemptible  = false
+        machine_type = "e2-standard-2"
+        
+        # Google recommends custom service accounts
+        service_account = google_service_account.kubernetes.email
+        oauth_scopes = [
+          "https://www.googleapis.com/auth/logging.write",
+          "https://www.googleapis.com/auth/monitoring",
+        ]
+        
+        labels = {
+          env = "production"
+          app = "addtocloud"
+        }
+        
+        tags = ["gke-node", "addtocloud-gke-secondary"]
+        metadata = {
+          disable-legacy-endpoints = "true"
+        }
+      }
+      
+      autoscaling {
+        min_node_count = 2
+        max_node_count = 8
+      }
+      
+      management {
+        auto_repair  = true
+        auto_upgrade = true
+      }
+    }
+    
+    # Preemptible node pool
+    resource "google_container_node_pool" "preemptible_nodes" {
+      name       = "preemptible-node-pool"
+      location   = "us-central1"
+      cluster    = google_container_cluster.addtocloud_gke.name
+      node_count = 2
+      
+      node_config {
+        preemptible  = true
+        machine_type = "e2-standard-2"
+        
+        service_account = google_service_account.kubernetes.email
+        oauth_scopes = [
+          "https://www.googleapis.com/auth/logging.write",
+          "https://www.googleapis.com/auth/monitoring",
+        ]
+        
+        labels = {
+          env = "production"
+          app = "addtocloud"
+          node-type = "preemptible"
+        }
+        
+        taint {
+          key    = "preemptible"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+        
+        tags = ["gke-node", "preemptible"]
+      }
+      
+      autoscaling {
+        min_node_count = 0
+        max_node_count = 5
+      }
+    }

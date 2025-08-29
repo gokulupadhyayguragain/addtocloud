@@ -1,0 +1,71 @@
+{
+  "name": "addtocloud-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AddToCloud Enterprise Platform Frontend",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:cloudflare": "node scripts/build-cloudflare.js",
+    "start": "next start",
+    "export": "npm run build",
+    "build:export": "npm run build",
+    "deploy": "npm run build && wrangler pages deploy out",
+    "deploy:staging": "npm run build && wrangler pages deploy out --branch staging",
+    "deploy:production": "npm run build && wrangler pages deploy out --branch main",
+    "preview": "wrangler pages dev out",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "cloudflare:setup": "wrangler pages project create addtocloud",
+    "cloudflare:domains": "wrangler pages project list"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^3.3.0",
+    "@react-three/drei": "^9.88.0",
+    "@react-three/fiber": "^8.15.0",
+    "axios": "^1.6.0",
+    "clsx": "^2.0.0",
+    "framer-motion": "^10.16.0",
+    "lucide-react": "^0.292.0",
+    "next": "^14.2.32",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-hook-form": "^7.47.0",
+    "react-query": "^3.39.0",
+    "tailwind-merge": "^2.0.0",
+    "three": "^0.170.0",
+    "zod": "^3.22.0",
+    "zustand": "^4.4.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/typography": "^0.5.16",
+    "@testing-library/jest-dom": "^6.1.0",
+    "@testing-library/react": "^13.4.0",
+    "autoprefixer": "^10.4.21",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "postcss": "^8.5.6",
+    "prettier": "^3.0.0",
+    "prettier-plugin-tailwindcss": "^0.5.0",
+    "tailwindcss": "^3.4.17",
+    "wrangler": "^4.33.1"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}
