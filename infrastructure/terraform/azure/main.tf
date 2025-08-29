@@ -66,6 +66,8 @@ resource "azurerm_kubernetes_cluster" "addtocloud" {
   network_profile {
     network_plugin    = "azure"
     load_balancer_sku = "standard"
+    service_cidr      = "172.16.0.0/16"
+    dns_service_ip    = "172.16.0.10"
   }
 
   tags = {
@@ -76,7 +78,7 @@ resource "azurerm_kubernetes_cluster" "addtocloud" {
 
 # Container Registry
 resource "azurerm_container_registry" "addtocloud" {
-  name                = "acrprod"
+  name                = "addtocloudacr2025"
   resource_group_name = azurerm_resource_group.addtocloud.name
   location            = azurerm_resource_group.addtocloud.location
   sku                 = "Premium"

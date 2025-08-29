@@ -1,0 +1,59 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: addtocloud-gateway
+  namespace: addtocloud
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "addtocloud.tech"
+    - "www.addtocloud.tech"
+    - "aws.addtocloud.tech"
+    - "azure.addtocloud.tech"
+    - "*"
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: addtocloud-tls
+    hosts:
+    - "addtocloud.tech"
+    - "www.addtocloud.tech"
+    - "aws.addtocloud.tech"
+    - "azure.addtocloud.tech"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: addtocloud-routes
+  namespace: addtocloud
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - addtocloud-gateway
+  http:
+  - match:
+    - uri:
+        prefix: "/api"
+    route:
+    - destination:
+        host: addtocloud-backend.addtocloud.svc.cluster.local
+        port:
+          number: 8080
+  - match:
+    - uri:
+        prefix: "/"
+    route:
+    - destination:
+        host: addtocloud-frontend.addtocloud.svc.cluster.local
+        port:
+          number: 3000

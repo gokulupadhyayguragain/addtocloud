@@ -173,6 +173,7 @@ resource "aws_eks_cluster" "main" {
   name     = "${var.project_name}-${var.environment}-eks"
   role_arn = aws_iam_role.eks_cluster.arn
   version  = var.kubernetes_version
+  bootstrap_self_managed_addons = false
 
   vpc_config {
     subnet_ids              = concat(aws_subnet.public[*].id, aws_subnet.private[*].id)
@@ -262,6 +263,9 @@ resource "aws_eks_node_group" "main" {
   node_role_arn   = aws_iam_role.eks_nodes.arn
   subnet_ids      = aws_subnet.private[*].id
   instance_types  = [var.aws_node_instance_type]
+  ami_type        = "AL2_x86_64"
+  capacity_type   = "ON_DEMAND"
+  disk_size       = 20
 
   scaling_config {
     desired_size = var.node_count
@@ -271,11 +275,6 @@ resource "aws_eks_node_group" "main" {
 
   update_config {
     max_unavailable = 1
-  }
-
-  launch_template {
-    name    = aws_launch_template.eks_nodes.name
-    version = aws_launch_template.eks_nodes.latest_version
   }
 
   tags = var.common_tags
@@ -294,6 +293,16 @@ resource "aws_launch_template" "eks_nodes" {
   instance_type = var.aws_node_instance_type
 
   vpc_security_group_ids = [aws_security_group.eks_nodes.id]
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size = 20
+      volume_type = "gp3"
+      encrypted   = true
+      delete_on_termination = true
+    }
+  }
 
   user_data = base64encode(<<-EOF
               #!/bin/bash
@@ -401,7 +410,7 @@ resource "aws_db_instance" "postgres" {
   identifier = "${var.project_name}-${var.environment}-postgres"
 
   engine         = "postgres"
-  engine_version = "15.4"
+  engine_version = "15.8"
   instance_class = var.database_instance_class
 
   allocated_storage     = var.database_allocated_storage

@@ -1,14 +1,11 @@
 import { useState } from 'react';
 import { useRouter } from 'next/router';
+import Link from 'next/link';
 
 export default function Login() {
-  const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
     email: '',
-    password: '',
-    confirmPassword: '',
-    firstName: '',
-    lastName: ''
+    password: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -20,17 +17,15 @@ export default function Login() {
     setError('');
 
     try {
-      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-      const payload = isLogin 
-        ? { email: formData.email, password: formData.password }
-        : formData;
-
-      const response = await fetch(endpoint, {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ 
+          email: formData.email, 
+          password: formData.password 
+        }),
       });
 
       const data = await response.json();
@@ -69,7 +64,7 @@ export default function Login() {
             </svg>
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-white">
-            {isLogin ? 'Sign in to AddToCloud' : 'Create your account'}
+            Sign in to AddToCloud
           </h2>
           <p className="mt-2 text-center text-sm text-gray-300">
             Access 360+ cloud services across AWS, Azure, and GCP
@@ -81,41 +76,6 @@ export default function Login() {
             {error && (
               <div className="bg-red-500/20 border border-red-500 text-red-100 px-4 py-3 rounded-lg">
                 {error}
-              </div>
-            )}
-
-            {!isLogin && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="firstName" className="block text-sm font-medium text-gray-300">
-                    First Name
-                  </label>
-                  <input
-                    id="firstName"
-                    name="firstName"
-                    type="text"
-                    required={!isLogin}
-                    value={formData.firstName}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full px-3 py-2 bg-white/10 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="John"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="lastName" className="block text-sm font-medium text-gray-300">
-                    Last Name
-                  </label>
-                  <input
-                    id="lastName"
-                    name="lastName"
-                    type="text"
-                    required={!isLogin}
-                    value={formData.lastName}
-                    onChange={handleInputChange}
-                    className="mt-1 block w-full px-3 py-2 bg-white/10 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Doe"
-                  />
-                </div>
               </div>
             )}
 
@@ -144,7 +104,7 @@ export default function Login() {
                 id="password"
                 name="password"
                 type="password"
-                autoComplete={isLogin ? "current-password" : "new-password"}
+                autoComplete="current-password"
                 required
                 value={formData.password}
                 onChange={handleInputChange}
@@ -152,25 +112,6 @@ export default function Login() {
                 placeholder="••••••••"
               />
             </div>
-
-            {!isLogin && (
-              <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-300">
-                  Confirm Password
-                </label>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required={!isLogin}
-                  value={formData.confirmPassword}
-                  onChange={handleInputChange}
-                  className="mt-1 block w-full px-3 py-2 bg-white/10 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="••••••••"
-                />
-              </div>
-            )}
 
             <div className="space-y-4">
               <button
@@ -184,33 +125,22 @@ export default function Login() {
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
                 ) : null}
-                {loading ? 'Please wait...' : (isLogin ? 'Sign in' : 'Create account')}
+                {loading ? 'Please wait...' : 'Sign in'}
               </button>
 
               <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsLogin(!isLogin);
-                    setError('');
-                    setFormData({
-                      email: '',
-                      password: '',
-                      confirmPassword: '',
-                      firstName: '',
-                      lastName: ''
-                    });
-                  }}
+                <Link 
+                  href="/request-access"
                   className="text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors"
                 >
-                  {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
-                </button>
+                  Don't have an account? Request access
+                </Link>
               </div>
             </div>
           </div>
 
           <div className="text-center text-xs text-gray-400">
-            By signing up, you agree to our Terms of Service and Privacy Policy
+            Contact support for assistance with your account
           </div>
         </form>
       </div>

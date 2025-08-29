@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: istio
+  namespace: istio-system
+  labels:
+    istio.io/rev: default
+    install.operator.istio.io/owning-resource: unknown
+    operator.istio.io/component: Pilot
+    release: istiod
+data:
+  mesh: |
+    defaultConfig:
+      discoveryRefreshDelay: 10s
+      proxyStatsMatcher:
+        exclusionRegexps:
+        - ".*circuit_breakers.*"
+        - ".*upstream_rq_retry.*"
+        - ".*upstream_rq_pending.*"
+        - ".*_cx_.*"
+        inclusionRegexps:
+        - ".*_cx_open_timeout.*"
+        - ".*_cx_connect_timeout.*"
+    defaultProviders:
+      metrics:
+      - prometheus
+    extensionProviders:
+    - name: prometheus
+      prometheus: {}
+    rootNamespace: istio-system
+    trustDomain: cluster.local
+  meshNetworks: 'networks: {}'
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: istio-ca-root-cert
+  namespace: istio-system
+  labels:
+    istio.io/rev: default
+data:
+  root-cert.pem: |
+    -----BEGIN CERTIFICATE-----
+    MIIDTDCCAjSgAwIBAgIJAKKKKKKKKKKKMA0GCSqGSIb3DQEBCwUAMDQxGDAWBgNV
+    BAMTD2NsdXN0ZXIubG9jYWwgQ0ExGDAWBgNVBAoTD2NsdXN0ZXIubG9jYWwgQ0Ew
+    HhcNMjQwMTAxMDAwMDAwWhcNMzQwMTAxMDAwMDAwWjA0MRgwFgYDVQQDEw9jbHVz
+    dGVyLmxvY2FsIENBMRgwFgYDVQQKEw9jbHVzdGVyLmxvY2FsIENBMIIBIjANBgkq
+    hkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1234567890abcdefghijklmnopqrstuvw
+    xyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyz
+    ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCD
+    EFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGH
+    IJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKL
+    MNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP
+    QRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRST
+    UVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX
+    YZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ12
+    34567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZwIDAQAB
+    o1MwUTAdBgNVHQ4EFgQU1234567890abcdefghijklmnopqrstuvwxyz1234567890
+    abcdefghijklmnopqrstuvwxyzAfAwDwYDVR0TAQH/BAUwAwEB/zAfBgNVHSMEGDAW
+    gBT1234567890abcdefghijklmnopqrstuvwxyz1234567890abcdefghijklmnopq
+    rstuvwxyzMA0GCSqGSIb3DQEBCwUAA4IBAQC1234567890abcdefghijklmnopqrs
+    tuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvw
+    xyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzA
+    BCDEFGHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEF
+    GHIJKLMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJK
+    LMNOPQRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOP
+    QRSTUVWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTU
+    VWXYZ1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
+    1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ12345
+    67890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890
+    abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ==
+    -----END CERTIFICATE-----

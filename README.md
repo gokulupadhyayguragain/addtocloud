@@ -1,13 +1,185 @@
-# # AddToCloud Enterprise Platform
+# 🌩️ AddToCloud - Multi-Cloud Container Registry & Management Platform
 
-> **Enterprise-grade cloud service platform providing PaaS, FaaS, IaaS, and SaaS services with multi-cloud deployment capabilities.**
+> **Enterprise-grade multi-cloud container platform with controlled access, service mesh connectivity, and global deployment capabilities across AWS, Azure, and Google Cloud.**
 
 [![Build Status](https://github.com/gokulupadhyayguragain/addtocloud/workflows/Build/badge.svg)](https://github.com/gokulupadhyayguragain/addtocloud/actions)
 [![Deploy AWS](https://github.com/gokulupadhyayguragain/addtocloud/workflows/Deploy%20AWS/badge.svg)](https://github.com/gokulupadhyayguragain/addtocloud/actions)
 [![Deploy Azure](https://github.com/gokulupadhyayguragain/addtocloud/workflows/Deploy%20Azure/badge.svg)](https://github.com/gokulupadhyayguragain/addtocloud/actions)
 [![Deploy GCP](https://github.com/gokulupadhyayguragain/addtocloud/workflows/Deploy%20GCP/badge.svg)](https://github.com/gokulupadhyayguragain/addtocloud/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Multi-Cloud](https://img.shields.io/badge/Multi--Cloud-AWS%20%7C%20Azure%20%7C%20GCP-blue)](https://github.com/gokulupadhyayguragain/addtocloud)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.30-326ce5.svg)](https://kubernetes.io/)
+[![Istio](https://img.shields.io/badge/Service%20Mesh-Istio-466bb0.svg)](https://istio.io/)
+
+## 🎯 Overview
+
+**AddToCloud** is a sophisticated multi-cloud container registry and management platform designed to provide seamless container deployment across **AWS EKS**, **Azure AKS**, and **Google Cloud GKE**. The platform features controlled access, multi-cloud orchestration, and enterprise-grade service mesh connectivity.
+
+### 🔑 Key Highlights
+
+- **🌐 Multi-Cloud Native**: Deploy across AWS EKS, Azure AKS, and GCP GKE simultaneously
+- **🔒 Controlled Access**: Request-based registration system (no public signup allowed)
+- **🕸️ Service Mesh**: Istio-powered cross-cloud connectivity and traffic management
+- **🚀 Modern Stack**: Next.js frontend, Go backend, PostgreSQL databases across all clouds
+- **☁️ Cloudflare Integration**: Global CDN and DNS management with edge optimization
+- **📊 Enterprise Monitoring**: Prometheus & Grafana observability stack with multi-cloud metrics
+
+## 🏗️ Multi-Cloud Architecture
+
+```mermaid
+graph TB
+    subgraph "Edge & CDN"
+        CF[Cloudflare CDN/DNS]
+        EDGE[Edge Locations Worldwide]
+        CF --> EDGE
+    end
+
+    subgraph "Frontend Layer"
+        FE[Next.js Frontend]
+        LANDING[Landing Page]
+        DASHBOARD[Admin Dashboard]
+        CF --> FE
+        FE --> LANDING
+        FE --> DASHBOARD
+    end
+
+    subgraph "Container Registry Strategy"
+        GH[GitHub Container Registry]
+        GHCR[ghcr.io/gokulupadhyayguragain/addtocloud]
+        GH --> GHCR
+    end
+
+    subgraph "AWS Cloud - Primary"
+        EKS[EKS Cluster addtocloud-prod-eks]
+        RDS_AWS[RDS PostgreSQL]
+        ECR[ECR Registry]
+        ALB_AWS[Application Load Balancer]
+        EKS --> RDS_AWS
+        GHCR --> ECR
+        ALB_AWS --> EKS
+    end
+
+    subgraph "Azure Cloud - Secondary"
+        AKS[AKS Cluster aks-addtocloud-prod]
+        PSQL_AZ[PostgreSQL Flexible Server]
+        ACR[Azure Container Registry addtocloudacr2025]
+        ALB_AZ[Azure Load Balancer]
+        AKS --> PSQL_AZ
+        GHCR --> ACR
+        ALB_AZ --> AKS
+    end
+
+    subgraph "GCP Cloud - Tertiary"
+        GKE[GKE Cluster addtocloud-gke-cluster]
+        PSQL_GCP[Cloud SQL PostgreSQL]
+        GAR[Google Artifact Registry]
+        ALB_GCP[Google Load Balancer]
+        GKE --> PSQL_GCP
+        GHCR --> GAR
+        ALB_GCP --> GKE
+    end
+
+    subgraph "Istio Service Mesh"
+        ISTIO_CONTROL[Istio Control Plane]
+        ISTIO_GATEWAY[Istio Gateway]
+        CROSS_CLUSTER[Cross-Cluster Communication]
+        
+        ISTIO_CONTROL -.-> EKS
+        ISTIO_CONTROL -.-> AKS
+        ISTIO_CONTROL -.-> GKE
+        ISTIO_GATEWAY --> ALB_AWS
+        ISTIO_GATEWAY --> ALB_AZ
+        ISTIO_GATEWAY --> ALB_GCP
+    end
+
+    subgraph "Backend Services"
+        API[Go REST API]
+        AUTH[Authentication Service]
+        CLOUD_MGR[Cloud Manager]
+        USER_MGR[User Management]
+        
+        API --> AUTH
+        API --> CLOUD_MGR
+        API --> USER_MGR
+    end
+
+    subgraph "Monitoring & Observability"
+        PROMETHEUS[Prometheus]
+        GRAFANA[Grafana]
+        JAEGER[Jaeger Tracing]
+        KIALI[Kiali Service Graph]
+        
+        PROMETHEUS --> EKS
+        PROMETHEUS --> AKS
+        PROMETHEUS --> GKE
+        GRAFANA --> PROMETHEUS
+    end
+
+    FE --> API
+    API --> EKS
+    API --> AKS
+    API --> GKE
+
+    DASHBOARD --> GRAFANA
+    DASHBOARD --> KIALI
+```
+
+## ✨ Platform Features
+
+### 🔐 Authentication & Security
+- **Request-Only Access**: Controlled registration system with admin approval
+- **JWT-based Authentication**: Secure token management with refresh capabilities
+- **Role-based Access Control**: Granular permissions (Admin, User, Viewer)
+- **Multi-Factor Authentication**: Enhanced security for admin accounts
+
+### ☁️ Multi-Cloud Management
+- **Unified Dashboard**: Single interface managing all three cloud providers
+- **Container Deployment**: Deploy to specific clouds or all simultaneously
+- **Cross-Cloud Load Balancing**: Intelligent traffic distribution
+- **Disaster Recovery**: Automatic failover between cloud regions
+
+### 🚢 Container Registry & CI/CD
+- **GitHub Integration**: Automated builds from repository pushes
+- **Multi-Registry Push**: Simultaneous deployment to ECR, ACR, and GAR
+- **Version Management**: Container image versioning with rollback capabilities
+- **GitOps Workflows**: ArgoCD-powered continuous deployment
+
+### 🌐 Service Mesh & Networking
+- **Istio Integration**: Advanced traffic management and security
+- **Cross-Cloud Connectivity**: Secure inter-cluster communication
+- **Canary Deployments**: Gradual rollouts with traffic shifting
+- **Circuit Breakers**: Fault tolerance and resilience patterns
+
+## 🌩️ Infrastructure Status
+
+### AWS EKS (Primary) ✅
+- **Cluster**: `addtocloud-prod-eks`
+- **Endpoint**: `https://D35A571D946940DBBFB2E3F044ED5397.gr7.us-west-2.eks.amazonaws.com`
+- **Region**: `us-west-2`
+- **Nodes**: 3x t3.medium instances (ACTIVE)
+- **Database**: RDS PostgreSQL (addtocloud-prod-postgres)
+- **Registry**: ECR (741448922544.dkr.ecr.us-west-2.amazonaws.com/addtocloud-prod)
+
+### Azure AKS (Secondary) ✅
+- **Cluster**: `aks-addtocloud-prod`
+- **Region**: `East US`
+- **Nodes**: 3x Standard_D2s_v3 instances
+- **Database**: PostgreSQL Flexible Server
+- **Registry**: Azure Container Registry (addtocloudacr2025)
+
+### Google Cloud GKE (Tertiary) ✅
+- **Cluster**: `addtocloud-gke-cluster`
+- **Region**: `us-central1`
+- **Nodes**: 3x e2-medium instances
+- **Database**: Cloud SQL PostgreSQL
+- **Registry**: Google Artifact Registry
 
 ## 🚀 Quick Start
+
+### ✅ **LIVE ENDPOINTS** (Service Mesh Active)
+- **AWS EKS**: http://a21f927dc7e504cbe99d241bc3562345-1460504033.us-west-2.elb.amazonaws.com
+- **Azure AKS**: http://52.224.84.148
+- **Status**: 🟢 ONLINE with Istio Service Mesh v1.19.5
 
 ### Prerequisites
 - **Docker** 20.10+
