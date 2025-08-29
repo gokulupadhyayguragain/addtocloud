@@ -268,14 +268,11 @@ jobs:
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           wranglerVersion: '3'
 
-      - name: 📢 Deployment notification
-        uses: 8398a7/action-slack@v3
-        if: always()
-        with:
-          status: ${{ job.status }}
-          channel: '#deployments'
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-          fields: repo,message,commit,author,action,eventName,ref,workflow
+      - name: 📢 Deployment Status
+        continue-on-error: true
+        run: |
+          echo "Frontend deployment completed: ${{ job.status }}"
+          echo "Environment: ${{ github.ref == 'refs/heads/main' && 'Production' || 'Staging' }}"
 
   # Job 5: Deploy Infrastructure and Backend
   deploy-backend:
@@ -399,7 +396,7 @@ jobs:
           name: integration-test-results
           path: integration-test-results.html
 
-  # Job 7: Deployment Notification
+  # Job 7: Deployment Notification  
   notify:
     name: 📢 Notify Deployment
     runs-on: ubuntu-latest
@@ -407,44 +404,9 @@ jobs:
     if: always()
 
     steps:
-      - name: 📢 Slack notification
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          channel: '#deployments'
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-          fields: repo,message,commit,author,action,eventName,ref,workflow
-          custom_payload: |
-            {
-              attachments: [{
-                color: '${{ job.status }}' === 'success' ? 'good' : '${{ job.status }}' === 'failure' ? 'danger' : 'warning',
-                title: 'AddToCloud Deployment Status',
-                fields: [
-                  { title: 'Environment', value: '${{ github.ref == 'refs/heads/main' && 'Production' || 'Staging' }}', short: true },
-                  { title: 'Frontend', value: '${{ needs.deploy-frontend.result }}', short: true },
-                  { title: 'Backend', value: '${{ needs.deploy-backend.result }}', short: true },
-                  { title: 'Tests', value: '${{ needs.integration-tests.result }}', short: true }
-                ]
-              }]
-            }
-
-      - name: 📧 Email notification
-        if: failure()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: smtp.gmail.com
-          server_port: 587
-          username: ${{ secrets.EMAIL_USERNAME }}
-          password: ${{ secrets.EMAIL_PASSWORD }}
-          subject: '🚨 AddToCloud Deployment Failed'
-          to: ${{ secrets.NOTIFY_EMAIL }}
-          from: AddToCloud CI/CD
-          body: |
-            Deployment failed for AddToCloud platform.
-            
-            Branch: ${{ github.ref }}
-            Commit: ${{ github.sha }}
-            Author: ${{ github.actor }}
-            
-            Check the workflow logs for more details:
-            https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: 📢 Deployment Complete
+        run: |
+          echo "Deployment completed with status:"
+          echo "Frontend: ${{ needs.deploy-frontend.result }}"
+          echo "Backend: ${{ needs.deploy-backend.result }}"
+          echo "Tests: ${{ needs.integration-tests.result }}"
