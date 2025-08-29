@@ -5,6 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -43,7 +48,6 @@ jobs:
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         projectName: addtocloud-tech
         directory: ./apps/frontend/out
-        gitHubToken: ${{ secrets.GITHUB_TOKEN }}
         wranglerVersion: '3'
 
   # Backend Build and Deploy
@@ -68,7 +72,7 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-${{ hashFiles('apps/backend/go.sum') }}
         restore-keys: |
           ${{ runner.os }}-go-
 
@@ -77,13 +81,6 @@ jobs:
 
     - name: Build binary
       run: go build -o bin/main cmd/main.go
-
-    - name: Deploy to Railway (if token available)
-      env:
-        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      if: env.RAILWAY_TOKEN != ''
-      run: |
-        echo "Railway deployment skipped - workflow removed"
 
     - name: Deploy status
       run: |
