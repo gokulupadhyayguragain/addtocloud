@@ -1,24 +1,13 @@
-name = "addtocloud-frontend"
+# Cloudflare Pages configuration for Next.js app
+name = "addtocloud"
 compatibility_date = "2024-01-01"
-compatibility_flags = ["nodejs_compat"]
 
-# Cloudflare Pages configuration for Next.js app in frontend folder
+# Pages-specific configuration
 pages_build_output_dir = "frontend/out"
 
-# Build configuration - use simple approach
-[build]
-command = "cd frontend && npm install && npm run build"
-cwd = "."
-
-# Environment variables for production
+# Only production and preview environments are supported by Pages
 [env.production]
-name = "addtocloud-production"
 compatibility_flags = ["nodejs_compat"]
 
-[env.staging]  
-name = "addtocloud-staging"
-compatibility_flags = ["nodejs_compat"]
-
-[env.development]
-name = "addtocloud-dev"
+[env.preview]
 compatibility_flags = ["nodejs_compat"]
