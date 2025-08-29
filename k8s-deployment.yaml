@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-backend
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: addtocloud-backend
+  template:
+    metadata:
+      labels:
+        app: addtocloud-backend
+    spec:
+      containers:
+      - name: backend
+        image: gcr.io/static-operator-469115-h1/addtocloud-backend:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: PORT
+          value: "8080"
+        - name: ENVIRONMENT
+          value: "production"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-backend-service
+  namespace: default
+spec:
+  selector:
+    app: addtocloud-backend
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-frontend
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: addtocloud-frontend
+  template:
+    metadata:
+      labels:
+        app: addtocloud-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: gcr.io/static-operator-469115-h1/addtocloud-frontend:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: NEXT_PUBLIC_API_URL
+          value: "http://addtocloud-backend-service"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "300m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-frontend-service
+  namespace: default
+spec:
+  selector:
+    app: addtocloud-frontend
+  ports:
+  - port: 80
+    targetPort: 3000
+    protocol: TCP
+  type: LoadBalancer

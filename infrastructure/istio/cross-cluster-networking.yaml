@@ -1,0 +1,138 @@
+# Cross-Cluster Network Configuration
+# Enables communication between clusters in different clouds
+
+# Network definitions for each cluster
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: cross-network-gateway
+  namespace: istio-system
+  labels:
+    istio: eastwestgateway
+spec:
+  selector:
+    istio: eastwestgateway
+  servers:
+    - port:
+        number: 15021
+        name: status-port
+        protocol: TLS
+      tls:
+        mode: ISTIO_MUTUAL
+      hosts:
+        - "*.local"
+    - port:
+        number: 15443
+        name: tls
+        protocol: TLS
+      tls:
+        mode: ISTIO_MUTUAL
+      hosts:
+        - "*.local"
+---
+# Service for cross-cluster communication
+apiVersion: v1
+kind: Service
+metadata:
+  name: istio-eastwestgateway
+  namespace: istio-system
+  labels:
+    istio: eastwestgateway
+    app: istio-eastwestgateway
+spec:
+  type: LoadBalancer
+  selector:
+    istio: eastwestgateway
+  ports:
+    - port: 15021
+      targetPort: 15021
+      name: status-port
+    - port: 15443
+      targetPort: 15443
+      name: tls
+---
+# Virtual Service for cross-cluster routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: addtocloud-cross-cluster
+  namespace: addtocloud
+spec:
+  hosts:
+    - addtocloud-backend.addtocloud.svc.cluster.local
+  http:
+    - match:
+        - headers:
+            cluster:
+              exact: "gcp"
+      route:
+        - destination:
+            host: addtocloud-backend.addtocloud.svc.cluster.local
+            subset: gcp
+          weight: 100
+    - match:
+        - headers:
+            cluster:
+              exact: "aws"
+      route:
+        - destination:
+            host: addtocloud-backend.aws.local
+          weight: 100
+    - match:
+        - headers:
+            cluster:
+              exact: "azure"
+      route:
+        - destination:
+            host: addtocloud-backend.azure.local
+          weight: 100
+    - route:
+        - destination:
+            host: addtocloud-backend.addtocloud.svc.cluster.local
+            subset: gcp
+          weight: 34
+        - destination:
+            host: addtocloud-backend.aws.local
+          weight: 33
+        - destination:
+            host: addtocloud-backend.azure.local
+          weight: 33
+---
+# Destination Rules for load balancing
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: addtocloud-backend-dr
+  namespace: addtocloud
+spec:
+  host: addtocloud-backend.addtocloud.svc.cluster.local
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 100
+        maxRequestsPerConnection: 2
+    circuitBreaker:
+      consecutiveGatewayErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+    outlierDetection:
+      consecutive5xxErrors: 3
+      consecutiveGatewayErrors: 3
+      interval: 5s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+  subsets:
+    - name: gcp
+      labels:
+        cloud: gcp
+    - name: aws
+      labels:
+        cloud: aws
+    - name: azure
+      labels:
+        cloud: azure

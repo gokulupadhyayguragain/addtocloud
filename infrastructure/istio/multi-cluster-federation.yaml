@@ -1,0 +1,100 @@
+# Multi-Cloud Service Mesh Federation with Istio
+# This configuration enables cross-cluster communication and high availability
+
+# Primary Cluster Istio Configuration (GCP)
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: primary-cluster
+  namespace: istio-system
+spec:
+  values:
+    global:
+      meshID: mesh1
+      network: network-gcp
+      # Multi-cluster configuration for primary cluster
+      remotePilotAddress: 34.61.70.104  # GKE cluster endpoint
+    pilot:
+      env:
+        # Enable cross-cluster workload discovery
+        ENABLE_CROSS_CLUSTER_WORKLOAD_ENTRY: true
+        # External istiod configuration
+        EXTERNAL_ISTIOD: true
+    istiodRemote:
+      enabled: false
+  components:
+    pilot:
+      k8s:
+        env:
+          - name: PILOT_ENABLE_WORKLOAD_ENTRY_AUTOREGISTRATION
+            value: "true"
+          - name: PILOT_ENABLE_CROSS_CLUSTER_WORKLOAD_ENTRY
+            value: "true"
+          - name: PILOT_SKIP_VALIDATE_CLUSTER_SECRET
+            value: "true"
+---
+# AWS Remote Cluster Configuration
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: remote-cluster-aws
+  namespace: istio-system
+spec:
+  values:
+    global:
+      meshID: mesh1
+      network: network-aws
+      # Point to primary cluster (GCP)
+      remotePilotAddress: 34.61.70.104
+    pilot:
+      env:
+        EXTERNAL_ISTIOD: true
+    istiodRemote:
+      enabled: true
+      injectionURL: https://34.61.70.104:15017/inject
+  components:
+    base:
+      enabled: true
+    pilot:
+      enabled: false
+    proxy:
+      enabled: true
+    egressGateways:
+      - name: istio-egressgateway
+        enabled: true
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+---
+# Azure Remote Cluster Configuration  
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: remote-cluster-azure
+  namespace: istio-system
+spec:
+  values:
+    global:
+      meshID: mesh1
+      network: network-azure
+      # Point to primary cluster (GCP)
+      remotePilotAddress: 34.61.70.104
+    pilot:
+      env:
+        EXTERNAL_ISTIOD: true
+    istiodRemote:
+      enabled: true
+      injectionURL: https://34.61.70.104:15017/inject
+  components:
+    base:
+      enabled: true
+    pilot:
+      enabled: false
+    proxy:
+      enabled: true
+    egressGateways:
+      - name: istio-egressgateway
+        enabled: true
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true

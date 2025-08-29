@@ -1,0 +1,200 @@
+# High Availability Configuration for Multi-Cloud Setup
+# Implements failover, circuit breaking, and geographical load balancing
+
+# Global Load Balancer with Failover
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: addtocloud-global-lb
+  namespace: addtocloud
+spec:
+  hosts:
+    - addtocloud.tech
+    - api.addtocloud.tech
+  gateways:
+    - addtocloud-gateway
+  http:
+    # Primary traffic to GCP (closest to users)
+    - match:
+        - headers:
+            region:
+              exact: "us-central"
+      route:
+        - destination:
+            host: addtocloud-backend.addtocloud.svc.cluster.local
+            subset: gcp
+          weight: 70
+        - destination:
+            host: addtocloud-backend.aws.local
+          weight: 20
+        - destination:
+            host: addtocloud-backend.azure.local
+          weight: 10
+      fault:
+        delay:
+          percentage:
+            value: 0.1
+          fixedDelay: 5s
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: gateway-error,connect-failure,refused-stream
+    # East Coast traffic to AWS
+    - match:
+        - headers:
+            region:
+              exact: "us-east"
+      route:
+        - destination:
+            host: addtocloud-backend.aws.local
+          weight: 70
+        - destination:
+            host: addtocloud-backend.addtocloud.svc.cluster.local
+            subset: gcp
+          weight: 20
+        - destination:
+            host: addtocloud-backend.azure.local
+          weight: 10
+    # Azure for European traffic
+    - match:
+        - headers:
+            region:
+              exact: "eu-central"
+      route:
+        - destination:
+            host: addtocloud-backend.azure.local
+          weight: 70
+        - destination:
+            host: addtocloud-backend.addtocloud.svc.cluster.local
+            subset: gcp
+          weight: 20
+        - destination:
+            host: addtocloud-backend.aws.local
+          weight: 10
+    # Default routing with automatic failover
+    - route:
+        - destination:
+            host: addtocloud-backend.addtocloud.svc.cluster.local
+            subset: gcp
+          weight: 40
+        - destination:
+            host: addtocloud-backend.aws.local
+          weight: 30
+        - destination:
+            host: addtocloud-backend.azure.local
+          weight: 30
+      retries:
+        attempts: 3
+        perTryTimeout: 10s
+        retryOn: gateway-error,connect-failure,refused-stream,reset
+---
+# Service Entry for AWS cluster
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: addtocloud-backend-aws
+  namespace: addtocloud
+spec:
+  hosts:
+    - addtocloud-backend.aws.local
+  location: MESH_EXTERNAL
+  ports:
+    - number: 80
+      name: http
+      protocol: HTTP
+    - number: 443
+      name: https
+      protocol: HTTPS
+  resolution: DNS
+  addresses:
+    - 240.0.0.1  # Placeholder - will be updated with actual AWS LoadBalancer IP
+---
+# Service Entry for Azure cluster
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: addtocloud-backend-azure
+  namespace: addtocloud
+spec:
+  hosts:
+    - addtocloud-backend.azure.local
+  location: MESH_EXTERNAL
+  ports:
+    - number: 80
+      name: http
+      protocol: HTTP
+    - number: 443
+      name: https
+      protocol: HTTPS
+  resolution: DNS
+  addresses:
+    - 240.0.0.2  # Placeholder - will be updated with actual Azure LoadBalancer IP
+---
+# Circuit Breaker for High Availability
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: addtocloud-circuit-breaker
+  namespace: addtocloud
+spec:
+  host: "*.local"
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 50
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 5
+        maxRetries: 3
+        consecutiveGatewayErrors: 3
+        h2UpgradePolicy: UPGRADE
+    circuitBreaker:
+      consecutiveGatewayErrors: 3
+      consecutive5xxErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 70
+      minHealthPercent: 30
+    outlierDetection:
+      consecutive5xxErrors: 3
+      consecutiveGatewayErrors: 3
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 70
+      minHealthPercent: 30
+---
+# Health Check Configuration
+apiVersion: networking.istio.io/v1alpha3
+kind: WorkloadEntry
+metadata:
+  name: addtocloud-health-check
+  namespace: addtocloud
+spec:
+  address: addtocloud-backend.addtocloud.svc.cluster.local
+  ports:
+    health: 8080
+  labels:
+    app: addtocloud-backend
+    version: v1
+    cloud: gcp
+---
+# Auto-retry and Timeout Policy
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: addtocloud-resilience
+  namespace: addtocloud
+spec:
+  hosts:
+    - addtocloud-backend
+  http:
+    - timeout: 15s
+      retries:
+        attempts: 5
+        perTryTimeout: 3s
+        retryOn: gateway-error,connect-failure,refused-stream
+        retryRemoteLocalities: true
+      route:
+        - destination:
+            host: addtocloud-backend
