@@ -50,9 +50,14 @@ export default function Navigation() {
             
             {/* Auth Buttons */}
             {!isAuthenticated() ? (
-              <Link href="/login" className="btn-primary text-sm py-2 px-4">
-                Sign In
-              </Link>
+              <div className="flex items-center space-x-4">
+                <Link href="/request-access" className="btn-secondary text-sm py-2 px-4">
+                  Request Access
+                </Link>
+                <Link href="/login" className="btn-primary text-sm py-2 px-4">
+                  Sign In
+                </Link>
+              </div>
             ) : (
               <div className="flex items-center space-x-4">
                 <span className="text-slate-300 text-sm">

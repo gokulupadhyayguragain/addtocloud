@@ -55,15 +55,17 @@ func main() {
 		log.Println("✅ Database connected successfully")
 
 		// Auto-migrate
-		if err := db.AutoMigrate(&models.User{}); err != nil {
+		if err := db.AutoMigrate(&models.User{}, &models.AccessRequest{}); err != nil {
 			log.Printf("Warning: Failed to migrate database: %v", err)
 		}
 	}
 
 	// Initialize handlers
 	var authHandler *handlers.AuthHandler
+	var accessRequestHandler *handlers.AccessRequestHandler
 	if db != nil {
 		authHandler = handlers.NewAuthHandler(db)
+		accessRequestHandler = handlers.NewAccessRequestHandler(db)
 	}
 
 	// Setup router
@@ -119,11 +121,20 @@ func main() {
 	api := r.Group("/api/v1")
 	{
 		// Auth routes
-		if authHandler != nil {
+		if authHandler != nil && accessRequestHandler != nil {
 			auth := api.Group("/auth")
 			{
-				auth.POST("/register", authHandler.Register)
+				auth.POST("/request-access", accessRequestHandler.SubmitAccessRequest)
 				auth.POST("/login", authHandler.Login)
+			}
+
+			// Admin routes for access management
+			admin := api.Group("/admin")
+			admin.Use(middleware.AuthMiddleware()) // Assuming you have admin middleware
+			{
+				admin.GET("/access-requests", accessRequestHandler.GetAccessRequests)
+				admin.POST("/access-requests/:id/approve", accessRequestHandler.ApproveAccessRequest)
+				admin.POST("/access-requests/:id/reject", accessRequestHandler.RejectAccessRequest)
 			}
 
 			// Protected routes

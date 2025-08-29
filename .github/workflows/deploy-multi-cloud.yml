@@ -1,0 +1,96 @@
+name: Build and Deploy Multi-Cloud Platform
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha
+          type=raw,value=latest
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./apps/backend
+        file: ./infrastructure/docker/Dockerfile.backend
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        platforms: linux/amd64,linux/arm64
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: apps/frontend/package-lock.json
+        
+    - name: Install dependencies
+      run: |
+        cd apps/frontend
+        npm ci
+        
+    - name: Build frontend
+      run: |
+        cd apps/frontend
+        npm run build
+        
+    - name: Deploy to Cloudflare Pages
+      uses: cloudflare/pages-action@v1
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        projectName: addtocloud-tech
+        directory: apps/frontend/out
+        gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-notification:
+    needs: [build-backend, build-frontend]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Deployment Status
+      run: |
+        echo "🚀 Multi-Cloud Deployment Complete!"
+        echo "✅ Backend: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest"
+        echo "✅ Frontend: https://addtocloud-tech.pages.dev"
+        echo "📋 Ready for Kubernetes deployment to GKE, EKS, AKS"

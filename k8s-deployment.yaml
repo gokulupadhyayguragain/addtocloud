@@ -15,7 +15,8 @@ spec:
     spec:
       containers:
       - name: backend
-        image: gcr.io/static-operator-469115-h1/addtocloud-backend:latest
+        image: ghcr.io/gokulupadhyayguragain/addtocloud/backend:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 8080
         env:
