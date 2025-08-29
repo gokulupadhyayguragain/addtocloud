@@ -159,7 +159,7 @@ func main() {
 
 	// Start server
 	port := getEnvOrDefault("PORT", "8080")
-	log.Printf("🚀 Starting AddToCloud API on port %s", port)
+	log.Printf("🚀 Starting AddToCloud API v1.0.1 on port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
 
