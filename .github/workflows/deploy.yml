@@ -37,20 +37,14 @@ jobs:
         NEXT_PUBLIC_API_URL: https://api.addtocloud.tech
 
     - name: Deploy to Cloudflare Pages
-      run: |
-        echo "Frontend built successfully"
-        echo "Static files ready for deployment in ./out directory"
-        echo "Note: Cloudflare Pages project needs to be created manually first"
-        ls -la ./out/
-      # Temporary: Direct deploy commented until Cloudflare project is created
-      # uses: cloudflare/pages-action@v1
-      # with:
-      #   apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      #   accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      #   projectName: addtocloud-tech
-      #   directory: ./apps/frontend/out
-      #   gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-      #   wranglerVersion: '3'
+      uses: cloudflare/pages-action@v1
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        projectName: addtocloud-tech
+        directory: ./apps/frontend/out
+        gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+        wranglerVersion: '3'
 
   # Backend Build and Deploy
   backend-deploy:
