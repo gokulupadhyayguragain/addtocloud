@@ -60,8 +60,12 @@ jobs:
 
     - name: Create ECS cluster if it doesn't exist
       run: |
+        echo "Creating ECS cluster..."
         aws ecs describe-clusters --clusters $ECS_CLUSTER 2>/dev/null || \
         aws ecs create-cluster --cluster-name $ECS_CLUSTER
+        
+        echo "Waiting for cluster to be ready..."
+        sleep 10
 
     - name: Create or update ECS task definition
       id: task-def

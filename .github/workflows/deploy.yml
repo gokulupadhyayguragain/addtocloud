@@ -79,11 +79,11 @@ jobs:
       run: go build -o bin/main cmd/main.go
 
     - name: Deploy to Railway (if token available)
-      if: ${{ secrets.RAILWAY_TOKEN }}
+      env:
+        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      if: env.RAILWAY_TOKEN != ''
       run: |
-        npm install -g @railway/cli
-        railway login --token ${{ secrets.RAILWAY_TOKEN }}
-        railway deploy --detach || echo "Railway deployment failed, continuing..."
+        echo "Railway deployment skipped - workflow removed"
 
     - name: Deploy status
       run: |
@@ -93,4 +93,3 @@ jobs:
         echo "   - deploy-backend-aws.yml (requires AWS secrets)"
         echo "   - deploy-backend-azure.yml (requires Azure secrets)"  
         echo "   - deploy-backend-gcp.yml (requires GCP secrets)"
-        echo "   - deploy-backend-railway.yml (requires Railway token)"
