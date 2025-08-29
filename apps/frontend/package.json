@@ -14,6 +14,7 @@
     "deploy:staging": "npm run build && wrangler pages deploy out --branch staging",
     "deploy:production": "npm run build && wrangler pages deploy out --branch main",
     "preview": "wrangler pages dev out",
+    "lint": "next lint",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
