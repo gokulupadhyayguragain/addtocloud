@@ -1,0 +1,67 @@
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: addtocloud-external-services
+  namespace: addtocloud-prod
+spec:
+  hosts:
+  - api.github.com
+  - registry.npmjs.org
+  - proxy.golang.org
+  - storage.googleapis.com
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  location: MESH_EXTERNAL
+  resolution: DNS
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: addtocloud-mtls
+  namespace: addtocloud-prod
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: addtocloud-authz
+  namespace: addtocloud-prod
+spec:
+  selector:
+    matchLabels:
+      app: addtocloud-backend
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/addtocloud-prod/sa/addtocloud-frontend"]
+  - to:
+    - operation:
+        methods: ["GET", "POST"]
+        paths: ["/api/*", "/health"]
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: addtocloud-circuit-breaker
+  namespace: addtocloud-prod
+spec:
+  host: addtocloud-backend.addtocloud-prod.svc.cluster.local
+  trafficPolicy:
+    circuitBreaker:
+      consecutiveGatewayErrors: 5
+      consecutive5xxErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+    loadBalancer:
+      simple: LEAST_CONN
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 10
+        maxRequestsPerConnection: 10

@@ -1,0 +1,346 @@
+name: Enterprise Multi-Cloud Deployment with Full Stack
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infrastructure/**'
+      - 'apps/**'
+      - '.github/workflows/enterprise-multi-cloud.yml'
+  workflow_dispatch:
+    inputs:
+      cloud_provider:
+        description: 'Deploy to specific cloud provider'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - aws
+          - azure
+          - gcp
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Build and Push Container Images
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      frontend-image: ${{ steps.meta.outputs.tags }}
+      backend-image: ${{ steps.meta-backend.outputs.tags }}
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract frontend metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend
+
+    - name: Build and push frontend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./apps/frontend
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Extract backend metadata
+      id: meta-backend
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend
+
+    - name: Build and push backend
+      uses: docker/build-push-action@v5
+      with:
+        context: ./apps/backend
+        file: ./apps/backend/Dockerfile.production
+        push: true
+        tags: ${{ steps.meta-backend.outputs.tags }}
+        labels: ${{ steps.meta-backend.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # Deploy to AWS with Complete Stack
+  deploy-aws:
+    if: ${{ inputs.cloud_provider == 'all' || inputs.cloud_provider == 'aws' || inputs.cloud_provider == '' }}
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: aws-production
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+
+    - name: Install and configure tools
+      run: |
+        # Install Terraform
+        wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+        sudo apt update && sudo apt install terraform
+
+        # Install kubectl
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+        # Install Helm
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+        # Install Istioctl
+        curl -L https://istio.io/downloadIstio | sh -
+        sudo mv istio-*/bin/istioctl /usr/local/bin/
+
+        # Install Kustomize
+        curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+        sudo mv kustomize /usr/local/bin/
+
+        # Install ArgoCD CLI
+        curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+        sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+
+    - name: Deploy AWS Infrastructure with Terraform
+      working-directory: infrastructure/terraform/aws
+      run: |
+        terraform init
+        terraform workspace new production-aws || terraform workspace select production-aws
+        terraform plan -var-file="../terraform.tfvars" -out=tfplan
+        terraform apply tfplan
+
+    - name: Configure kubectl for EKS
+      run: |
+        aws eks update-kubeconfig --region us-west-2 --name addtocloud-aws-production
+        kubectl config set-context --current --namespace=addtocloud-prod
+
+    - name: Install Istio Service Mesh
+      run: |
+        istioctl install --set values.global.meshID=aws-mesh --set values.global.network=aws-network -y
+        kubectl label namespace default istio-injection=enabled
+        kubectl apply -f infrastructure/istio/
+
+    - name: Deploy monitoring stack with Helm
+      run: |
+        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+        helm repo add grafana https://grafana.github.io/helm-charts
+        helm repo update
+        
+        kubectl create namespace monitoring || true
+        helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+          --namespace monitoring \
+          --set grafana.adminPassword=admin123 \
+          --set prometheus.prometheusSpec.retention=15d \
+          --values infrastructure/monitoring/prometheus/values-aws.yaml
+
+    - name: Deploy application with Kustomize and Helm
+      run: |
+        kubectl create namespace addtocloud-prod || true
+        kubectl label namespace addtocloud-prod istio-injection=enabled
+        
+        # Deploy with Helm
+        helm upgrade --install addtocloud-platform infrastructure/helm \
+          --namespace addtocloud-prod \
+          --values infrastructure/helm/values-aws.yaml \
+          --set backend.image.tag=${{ needs.build-and-push.outputs.backend-image }} \
+          --set frontend.image.tag=${{ needs.build-and-push.outputs.frontend-image }}
+
+    - name: Setup ArgoCD for GitOps
+      run: |
+        kubectl create namespace argocd || true
+        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+        kubectl wait --for=condition=available --timeout=600s deployment/argocd-server -n argocd
+        kubectl apply -f devops/argocd/applications/aws-production.yaml
+
+    - name: Verify deployment
+      run: |
+        kubectl get pods -n addtocloud-prod
+        kubectl get svc -n addtocloud-prod
+        kubectl get ingress -n addtocloud-prod
+        
+        # Check Istio mesh status
+        istioctl proxy-status
+        
+        # Get LoadBalancer URLs
+        echo "🌐 AWS Deployment URLs:"
+        kubectl get svc -n istio-system istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+
+  # Deploy to Azure with Complete Stack
+  deploy-azure:
+    if: ${{ inputs.cloud_provider == 'all' || inputs.cloud_provider == 'azure' || inputs.cloud_provider == '' }}
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: azure-production
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Install tools
+      run: |
+        # Install kubectl, Helm, Istio, Kustomize (same as AWS)
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        curl -L https://istio.io/downloadIstio | sh -
+        sudo mv istio-*/bin/istioctl /usr/local/bin/
+
+    - name: Deploy Azure Infrastructure with Terraform
+      working-directory: infrastructure/terraform/azure
+      run: |
+        terraform init
+        terraform workspace new production-azure || terraform workspace select production-azure
+        terraform plan -var-file="../terraform.tfvars" -out=tfplan
+        terraform apply tfplan
+
+    - name: Configure kubectl for AKS
+      run: |
+        az aks get-credentials --resource-group addtocloud-azure-production --name addtocloud-azure-production
+
+    - name: Deploy complete stack to Azure
+      run: |
+        # Same deployment pattern as AWS but with Azure-specific configurations
+        istioctl install --set values.global.meshID=azure-mesh --set values.global.network=azure-network -y
+        kubectl create namespace addtocloud-prod || true
+        kubectl label namespace addtocloud-prod istio-injection=enabled
+        
+        helm upgrade --install addtocloud-platform infrastructure/helm \
+          --namespace addtocloud-prod \
+          --values infrastructure/helm/values-azure.yaml
+
+  # Deploy to GCP with Complete Stack
+  deploy-gcp:
+    if: ${{ inputs.cloud_provider == 'all' || inputs.cloud_provider == 'gcp' || inputs.cloud_provider == '' }}
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    environment: gcp-production
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v1
+      with:
+        credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+
+    - name: Deploy GCP Infrastructure and Stack
+      run: |
+        # Install tools
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+        sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+        curl -L https://istio.io/downloadIstio | sh -
+        sudo mv istio-*/bin/istioctl /usr/local/bin/
+        
+        # Deploy with Terraform
+        cd infrastructure/terraform/gcp
+        terraform init
+        terraform workspace new production-gcp || terraform workspace select production-gcp
+        terraform apply -auto-approve -var-file="../terraform.tfvars"
+        
+        # Configure kubectl
+        gcloud container clusters get-credentials addtocloud-gcp-production --zone us-west1-a
+        
+        # Deploy complete stack
+        istioctl install --set values.global.meshID=gcp-mesh --set values.global.network=gcp-network -y
+        kubectl create namespace addtocloud-prod || true
+        kubectl label namespace addtocloud-prod istio-injection=enabled
+        
+        helm upgrade --install addtocloud-platform infrastructure/helm \
+          --namespace addtocloud-prod \
+          --values infrastructure/helm/values-gcp.yaml
+
+  # Configure Cross-Cloud Service Mesh
+  configure-mesh-federation:
+    needs: [deploy-aws, deploy-azure, deploy-gcp]
+    if: ${{ always() && (inputs.cloud_provider == 'all' || inputs.cloud_provider == '') }}
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Configure cross-cluster Istio mesh
+      run: |
+        # Install tools
+        curl -L https://istio.io/downloadIstio | sh -
+        sudo mv istio-*/bin/istioctl /usr/local/bin/
+        
+        # Configure AWS context
+        aws eks update-kubeconfig --region us-west-2 --name addtocloud-aws-production
+        kubectl config rename-context $(kubectl config current-context) aws-production
+        
+        # Configure Azure context
+        az aks get-credentials --resource-group addtocloud-azure-production --name addtocloud-azure-production
+        kubectl config rename-context $(kubectl config current-context) azure-production
+        
+        # Configure GCP context
+        gcloud container clusters get-credentials addtocloud-gcp-production --zone us-west1-a
+        kubectl config rename-context $(kubectl config current-context) gcp-production
+        
+        # Setup cross-cluster secrets
+        kubectl config use-context aws-production
+        kubectl get secret cacerts -n istio-system -o yaml > /tmp/cacerts.yaml
+        
+        kubectl config use-context azure-production
+        kubectl apply -f /tmp/cacerts.yaml
+        
+        kubectl config use-context gcp-production
+        kubectl apply -f /tmp/cacerts.yaml
+        
+        # Apply cross-cluster service mesh configurations
+        kubectl apply -f infrastructure/istio/cross-cluster/
+
+  # Deploy with Ansible (Alternative approach)
+  ansible-deployment:
+    if: ${{ inputs.cloud_provider == 'ansible' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Ansible
+      run: |
+        sudo apt update
+        sudo apt install ansible -y
+        ansible-galaxy install -r devops/ansible/requirements.yml
+
+    - name: Run Ansible multi-cloud deployment
+      run: |
+        cd devops/ansible
+        ansible-playbook -i inventory/production deploy-multi-cloud.yml -e env=production

@@ -1,0 +1,175 @@
+# AddToCloud Platform Configuration
+global:
+  environment: production
+  region: multi-cloud
+  domain: addtocloud.tech
+  
+# Application Configuration
+app:
+  name: addtocloud-platform
+  version: "1.0.0"
+  replicas: 3
+  
+# Frontend Configuration
+frontend:
+  enabled: true
+  name: addtocloud-frontend
+  image:
+    repository: ghcr.io/gokulupadhyayguragain/addtocloud-frontend
+    tag: "latest"
+    pullPolicy: Always
+  replicas: 3
+  service:
+    type: ClusterIP
+    port: 3000
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: istio
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - host: addtocloud.tech
+        paths: ["/"]
+      - host: www.addtocloud.tech
+        paths: ["/"]
+    tls:
+      - secretName: addtocloud-tls
+        hosts:
+          - addtocloud.tech
+          - www.addtocloud.tech
+
+# Backend Configuration  
+backend:
+  enabled: true
+  name: addtocloud-backend
+  image:
+    repository: ghcr.io/gokulupadhyayguragain/addtocloud-backend
+    tag: "latest"
+    pullPolicy: Always
+  replicas: 3
+  service:
+    type: ClusterIP
+    port: 8080
+  env:
+    - name: GIN_MODE
+      value: "release"
+    - name: PORT
+      value: "8080"
+    - name: DATABASE_URL
+      valueFrom:
+        secretKeyRef:
+          name: addtocloud-secrets
+          key: database-url
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: istio
+    hosts:
+      - host: api.addtocloud.tech
+        paths: ["/"]
+    tls:
+      - secretName: addtocloud-api-tls
+        hosts:
+          - api.addtocloud.tech
+
+# Database Configuration
+postgresql:
+  enabled: true
+  auth:
+    username: addtocloud
+    database: addtocloud
+    existingSecret: postgresql-secret
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: fast-ssd
+
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    existingSecret: redis-secret
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+
+mongodb:
+  enabled: true
+  auth:
+    enabled: true
+    existingSecret: mongodb-secret
+  persistence:
+    enabled: true
+    size: 20Gi
+
+# Service Mesh (Istio)
+serviceMesh:
+  enabled: true
+  istio:
+    gateway:
+      enabled: true
+      hosts:
+        - addtocloud.tech
+        - api.addtocloud.tech
+        - monitoring.addtocloud.tech
+    virtualService:
+      enabled: true
+    destinationRule:
+      enabled: true
+      trafficPolicy:
+        loadBalancer:
+          simple: LEAST_CONN
+
+# Monitoring Configuration
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    server:
+      retention: "15d"
+      storage:
+        size: 50Gi
+  grafana:
+    enabled: true
+    adminPassword: "admin123"
+    persistence:
+      enabled: true
+      size: 10Gi
+    dashboards:
+      enabled: true
+  alertmanager:
+    enabled: true
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Security
+security:
+  networkPolicies:
+    enabled: true
+  podSecurityPolicy:
+    enabled: true
+  rbac:
+    enabled: true
+
+# Multi-Cloud Configuration
+multiCloud:
+  aws:
+    enabled: true
+    region: us-west-2
+    eksCluster: addtocloud-aws
+  azure:
+    enabled: true
+    region: West US 2
+    aksCluster: addtocloud-azure
+  gcp:
+    enabled: true
+    region: us-west1
+    gkeCluster: addtocloud-gcp

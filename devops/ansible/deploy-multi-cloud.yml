@@ -1,0 +1,116 @@
+---
+# AddToCloud Multi-Cloud Infrastructure Playbook
+- name: Deploy AddToCloud Platform to Multi-Cloud
+  hosts: localhost
+  gather_facts: false
+  vars:
+    project_name: addtocloud
+    environment: "{{ env | default('production') }}"
+    cloud_providers:
+      - aws
+      - azure
+      - gcp
+    
+  tasks:
+    - name: Create Terraform workspaces for each cloud
+      shell: |
+        cd infrastructure/terraform/{{ item }}
+        terraform workspace new {{ environment }}-{{ item }} || terraform workspace select {{ environment }}-{{ item }}
+        terraform init
+      loop: "{{ cloud_providers }}"
+      tags: [terraform, init]
+
+    - name: Apply Terraform infrastructure
+      shell: |
+        cd infrastructure/terraform/{{ item }}
+        terraform plan -var-file="../terraform.tfvars" -out=tfplan
+        terraform apply tfplan
+      loop: "{{ cloud_providers }}"
+      tags: [terraform, apply]
+
+    - name: Configure kubectl contexts for each cluster
+      shell: |
+        # AWS
+        aws eks update-kubeconfig --region us-west-2 --name {{ project_name }}-aws-{{ environment }}
+        kubectl config rename-context arn:aws:eks:us-west-2:ACCOUNT:cluster/{{ project_name }}-aws-{{ environment }} aws-{{ environment }}
+        
+        # Azure
+        az aks get-credentials --resource-group {{ project_name }}-azure-{{ environment }} --name {{ project_name }}-azure-{{ environment }}
+        kubectl config rename-context {{ project_name }}-azure-{{ environment }} azure-{{ environment }}
+        
+        # GCP
+        gcloud container clusters get-credentials {{ project_name }}-gcp-{{ environment }} --zone us-west1-a
+        kubectl config rename-context gke_PROJECT_us-west1-a_{{ project_name }}-gcp-{{ environment }} gcp-{{ environment }}
+      tags: [kubectl, config]
+
+    - name: Install Istio on each cluster
+      shell: |
+        kubectl config use-context {{ item }}-{{ environment }}
+        istioctl install --set values.global.meshID={{ item }}-mesh --set values.global.network={{ item }}-network -y
+        kubectl label namespace default istio-injection=enabled
+      loop: "{{ cloud_providers }}"
+      tags: [istio, install]
+
+    - name: Deploy monitoring stack with Helm
+      shell: |
+        kubectl config use-context {{ item }}-{{ environment }}
+        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+        helm repo add grafana https://grafana.github.io/helm-charts
+        helm repo update
+        
+        # Install Prometheus
+        helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+          --namespace monitoring \
+          --create-namespace \
+          --set grafana.adminPassword=admin123 \
+          --set prometheus.prometheusSpec.retention=15d
+          
+        # Install Grafana
+        helm upgrade --install grafana grafana/grafana \
+          --namespace monitoring \
+          --set adminPassword=admin123
+      loop: "{{ cloud_providers }}"
+      tags: [monitoring, helm]
+
+    - name: Deploy application with Kustomize
+      shell: |
+        kubectl config use-context {{ item }}-{{ environment }}
+        kubectl create namespace {{ project_name }}-prod || true
+        kubectl label namespace {{ project_name }}-prod istio-injection=enabled
+        kustomize build infrastructure/kustomize/overlays/{{ environment }}/{{ item }} | kubectl apply -f -
+      loop: "{{ cloud_providers }}"
+      tags: [app, deploy]
+
+    - name: Configure ArgoCD for GitOps
+      shell: |
+        kubectl config use-context {{ item }}-{{ environment }}
+        kubectl create namespace argocd || true
+        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+        kubectl apply -f devops/argocd/applications/{{ item }}-{{ environment }}.yaml
+      loop: "{{ cloud_providers }}"
+      tags: [argocd, gitops]
+
+    - name: Setup cross-cluster service mesh
+      shell: |
+        # Create cross-cluster secrets
+        kubectl config use-context aws-{{ environment }}
+        kubectl get secret cacerts -n istio-system -o yaml > /tmp/cacerts.yaml
+        
+        kubectl config use-context azure-{{ environment }}
+        kubectl apply -f /tmp/cacerts.yaml
+        
+        kubectl config use-context gcp-{{ environment }}
+        kubectl apply -f /tmp/cacerts.yaml
+        
+        # Apply cross-cluster configurations
+        kubectl apply -f infrastructure/istio/cross-cluster/
+      tags: [istio, cross-cluster]
+
+    - name: Verify deployments
+      shell: |
+        kubectl config use-context {{ item }}-{{ environment }}
+        kubectl get pods -n {{ project_name }}-prod
+        kubectl get svc -n {{ project_name }}-prod
+        kubectl get ingress -n {{ project_name }}-prod
+      loop: "{{ cloud_providers }}"
+      tags: [verify]
