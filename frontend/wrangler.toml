@@ -1,6 +1,24 @@
 name = "addtocloud-frontend"
 compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "./out"
+
+# Node.js compatibility for Cloudflare
+[build]
+command = "npm run build:cloudflare"
+publish = "./out"
+
+[env.production]
+name = "addtocloud-production"
+compatibility_flags = ["nodejs_compat"]
+
+[env.staging]  
+name = "addtocloud-staging"
+compatibility_flags = ["nodejs_compat"]
+
+[env.development]
+name = "addtocloud-dev"
+compatibility_flags = ["nodejs_compat"]
 
 [env.production]
 name = "addtocloud-production"
@@ -35,18 +53,13 @@ NEXT_PUBLIC_ENVIRONMENT = "staging"
 # Custom domains
 [[env.production.routes]]
 pattern = "addtocloud.tech"
-custom_domain = true
 
 [[env.production.routes]]
 pattern = "www.addtocloud.tech"
-custom_domain = true
 
 # Pages configuration
-[pages_build_output_dir = "./out"]
-
-# Functions (for API routes if needed)
-[[pages_build_output_dir]]
-binding = "API"
+[pages_build_output_dir]
+dir = "./out"
 
 # KV storage (for caching)
 [[kv_namespaces]]
