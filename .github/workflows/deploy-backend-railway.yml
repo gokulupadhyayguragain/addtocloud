@@ -1,0 +1,38 @@
+name: Deploy Backend to Railway
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/backend/**']
+  workflow_dispatch:
+
+jobs:
+  deploy-railway:
+    name: Deploy to Railway
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./apps/backend
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js (for Railway CLI)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install Railway CLI
+      run: npm install -g @railway/cli
+
+    - name: Deploy to Railway
+      env:
+        RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+      run: |
+        railway login --token $RAILWAY_TOKEN
+        railway deploy --detach
+        
+        echo "🚀 Backend API deployed to Railway!"
+        echo "🔍 Check your Railway dashboard for the service URL"
+        echo "📋 The API will be available at your Railway project URL"
