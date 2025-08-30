@@ -467,8 +467,45 @@
             window.location.href = '/admin-login.html';
         }
 
-        // Initialize dashboard
-        loadDashboard();
+        // API Connection Status Checker
+        async function checkAPIStatus() {
+            const statusElement = document.getElementById('api-status');
+            
+            try {
+                const response = await fetch('/api/health', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 5000
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.database === 'connected') {
+                        statusElement.className = 'api-status connected';
+                        statusElement.innerHTML = '✅ API Connection: Connected - Real Database & SMTP';
+                    } else {
+                        statusElement.className = 'api-status connecting';
+                        statusElement.innerHTML = '⚠️ API Connection: Demo Mode - Mock Database';
+                    }
+                } else {
+                    statusElement.className = 'api-status';
+                    statusElement.innerHTML = '❌ API Connection: Failed - Static Mode';
+                }
+            } catch (error) {
+                statusElement.className = 'api-status';
+                statusElement.innerHTML = '❌ API Connection: Failed';
+            }
+        }
+
+        // Initialize dashboard with real API integration
+        document.addEventListener('DOMContentLoaded', function() {
+            checkAPIStatus();
+            loadDashboard();
+            setInterval(checkAPIStatus, 30000);
+            setInterval(loadDashboard, 60000); // Refresh dashboard every minute
+        });
     </script>
 </body>
 </html>

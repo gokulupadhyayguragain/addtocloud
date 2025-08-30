@@ -5,12 +5,12 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /app
 
-# Copy go mod files
-COPY go.mod go.sum ./
+# Copy go mod files from backend directory
+COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 
-# Copy source code
-COPY . .
+# Copy backend source code
+COPY backend/ .
 
 # Build the OTP-enabled admin application
 ARG MAIN_FILE=main-otp-admin.go
