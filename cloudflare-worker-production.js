@@ -206,8 +206,9 @@ async function handleRequest(request) {
 
     // Admin OTP request endpoint
     if (url.pathname === '/api/v1/admin/request-otp' && request.method === 'POST') {
+      let otpRequest = null
       try {
-        const otpRequest = await request.json()
+        otpRequest = await request.json()
         
         const backendResponse = await fetch(`${BACKEND_URL}/api/v1/admin/request-otp`, {
           method: 'POST',
@@ -255,8 +256,9 @@ async function handleRequest(request) {
 
     // Admin OTP verification endpoint
     if (url.pathname === '/api/v1/admin/verify-otp' && request.method === 'POST') {
+      let otpVerification = null
       try {
-        const otpVerification = await request.json()
+        otpVerification = await request.json()
         
         const backendResponse = await fetch(`${BACKEND_URL}/api/v1/admin/verify-otp`, {
           method: 'POST',
