@@ -31,8 +31,8 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>AddToCloud - Enterprise Cloud Platform</title>
-        <meta name="description" content="Next-generation enterprise cloud platform with professional services" />
+        <title>AddToCloud - Enterprise Cloud Platform | Authentication Required</title>
+        <meta name="description" content="Next-generation enterprise cloud platform with professional services - Login required for access" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
