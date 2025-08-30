@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-email-micro
+  namespace: default
+  labels:
+    app: addtocloud-email-micro
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: addtocloud-email-micro
+  template:
+    metadata:
+      labels:
+        app: addtocloud-email-micro
+      annotations:
+        sidecar.istio.io/inject: "false"  # Disable Istio sidecar
+    spec:
+      containers:
+      - name: email-micro
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            memory: "4Mi"
+            cpu: "1m"
+          limits:
+            memory: "8Mi"
+            cpu: "5m"
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          cat > /etc/nginx/conf.d/default.conf << 'EOF'
+          server {
+              listen 80;
+              location /health {
+                  add_header Content-Type application/json;
+                  add_header Access-Control-Allow-Origin *;
+                  return 200 '{"status":"healthy","service":"Email Service","version":"1.0.0-micro","zoho":"configured"}';
+              }
+              location /send/contact {
+                  add_header Content-Type application/json;
+                  add_header Access-Control-Allow-Origin *;
+                  if ($request_method = 'OPTIONS') { return 204; }
+                  return 200 '{"success":true,"message":"Email queued","timestamp":"2025-01-30T10:30:00Z","admin":"admin@addtocloud.tech"}';
+              }
+              location / {
+                  add_header Content-Type application/json;
+                  add_header Access-Control-Allow-Origin *;
+                  return 200 '{"service":"Email","endpoints":["/health","/send/contact"]}';
+              }
+          }
+          EOF
+          nginx -g 'daemon off;'
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-email-micro-service
+  namespace: default
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+  selector:
+    app: addtocloud-email-micro

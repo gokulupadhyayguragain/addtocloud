@@ -1,0 +1,9 @@
+{
+  "name": "addtocloud-api-proxy",
+  "version": "1.0.0",
+  "description": "CloudFlare Worker to proxy API calls for AddToCloud",
+  "main": "cloudflare-worker.js",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  }
+}

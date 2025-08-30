@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-backend-full
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: addtocloud-backend-full
+  template:
+    metadata:
+      labels:
+        app: addtocloud-backend-full
+    spec:
+      containers:
+      - name: backend
+        image: golang:1.22-alpine
+        workingDir: /app
+        command: ["/bin/sh"]
+        args: ["-c", "apk add --no-cache postgresql-client && echo 'package main\nimport (\n\"database/sql\"\n\"encoding/json\"\n\"fmt\"\n\"log\"\n\"net/http\"\n\"os\"\n\"strconv\"\n\"strings\"\n\"time\"\n_ \"github.com/lib/pq\"\n)\ntype Service struct {\nID int `json:\"id\"`\nName string `json:\"name\"`\nDescription string `json:\"description\"`\nProvider string `json:\"provider\"`\nStatus string `json:\"status\"`\nPricingModel string `json:\"pricing_model\"`\n}\ntype User struct {\nID int `json:\"id\"`\nEmail string `json:\"email\"`\nFirstName string `json:\"first_name\"`\nLastName string `json:\"last_name\"`\nCompany string `json:\"company\"`\nCreatedAt time.Time `json:\"created_at\"`\n}\ntype ContactRequest struct {\nID int `json:\"id\"`\nName string `json:\"name\"`\nEmail string `json:\"email\"`\nSubject string `json:\"subject\"`\nMessage string `json:\"message\"`\nStatus string `json:\"status\"`\nCreatedAt time.Time `json:\"created_at\"`\n}\nvar db *sql.DB\nfunc initDB() {\ndbHost := os.Getenv(\"DB_HOST\")\nif dbHost == \"\" {\ndbHost = \"postgres\"\n}\ndbUser := os.Getenv(\"DB_USER\")\nif dbUser == \"\" {\ndbUser = \"addtocloud_user\"\n}\ndbPassword := os.Getenv(\"DB_PASSWORD\")\nif dbPassword == \"\" {\ndbPassword = \"addtocloud_secure_password_2025\"\n}\ndbName := os.Getenv(\"DB_NAME\")\nif dbName == \"\" {\ndbName = \"addtocloud\"\n}\npsqlInfo := fmt.Sprintf(\"host=%s port=5432 user=%s password=%s dbname=%s sslmode=disable\",\ndbHost, dbUser, dbPassword, dbName)\nvar err error\nfor i := 0; i < 10; i++ {\ndb, err = sql.Open(\"postgres\", psqlInfo)\nif err == nil {\nif err = db.Ping(); err == nil {\nlog.Println(\"Connected to database successfully\")\nreturn\n}\n}\nlog.Printf(\"Database connection attempt %d failed: %v\", i+1, err)\ntime.Sleep(5 * time.Second)\n}\nlog.Printf(\"Failed to connect to database after 10 attempts: %v\", err)\n}\nfunc healthHandler(w http.ResponseWriter, r *http.Request) {\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.Header().Set(\"Access-Control-Allow-Origin\", \"*\")\ncluster := os.Getenv(\"CLUSTER_NAME\")\nif cluster == \"\" {\ncluster = \"unknown\"\n}\ndbStatus := \"disconnected\"\nif db != nil {\nif err := db.Ping(); err == nil {\ndbStatus = \"connected\"\n}\n}\nresponse := map[string]interface{}{\n\"status\": \"healthy\",\n\"message\": \"AddToCloud API is running\",\n\"cluster\": cluster,\n\"database\": dbStatus,\n\"timestamp\": time.Now().Format(time.RFC3339),\n\"version\": \"2.0.0\",\n}\njson.NewEncoder(w).Encode(response)\n}\nfunc servicesHandler(w http.ResponseWriter, r *http.Request) {\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.Header().Set(\"Access-Control-Allow-Origin\", \"*\")\nif db == nil {\nfallbackServices := []Service{\n{ID: 1, Name: \"Virtual Machines\", Description: \"Scalable compute instances\", Provider: \"Multi-Cloud\", Status: \"active\", PricingModel: \"pay-per-hour\"},\n{ID: 2, Name: \"Object Storage\", Description: \"Highly available object storage\", Provider: \"Multi-Cloud\", Status: \"active\", PricingModel: \"pay-per-gb\"},\n}\njson.NewEncoder(w).Encode(map[string]interface{}{\"services\": fallbackServices, \"total\": len(fallbackServices), \"source\": \"fallback\"})\nreturn\n}\nrows, err := db.Query(\"SELECT id, name, description, provider, status, pricing_model FROM cloud_services ORDER BY id\")\nif err != nil {\nlog.Printf(\"Database query error: %v\", err)\nw.WriteHeader(http.StatusInternalServerError)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Database error\"})\nreturn\n}\ndefer rows.Close()\nvar services []Service\nfor rows.Next() {\nvar s Service\nif err := rows.Scan(&s.ID, &s.Name, &s.Description, &s.Provider, &s.Status, &s.PricingModel); err != nil {\nlog.Printf(\"Row scan error: %v\", err)\ncontinue\n}\nservices = append(services, s)\n}\njson.NewEncoder(w).Encode(map[string]interface{}{\"services\": services, \"total\": len(services), \"source\": \"database\"})\n}\nfunc contactHandler(w http.ResponseWriter, r *http.Request) {\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.Header().Set(\"Access-Control-Allow-Origin\", \"*\")\nw.Header().Set(\"Access-Control-Allow-Methods\", \"POST, OPTIONS\")\nw.Header().Set(\"Access-Control-Allow-Headers\", \"Content-Type\")\nif r.Method == \"OPTIONS\" {\nw.WriteHeader(http.StatusOK)\nreturn\n}\nif r.Method != \"POST\" {\nw.WriteHeader(http.StatusMethodNotAllowed)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Method not allowed\"})\nreturn\n}\nvar req ContactRequest\nif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\nw.WriteHeader(http.StatusBadRequest)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Invalid request\"})\nreturn\n}\nif req.Name == \"\" || req.Email == \"\" || req.Message == \"\" {\nw.WriteHeader(http.StatusBadRequest)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Missing required fields\"})\nreturn\n}\nif db != nil {\nquery := \"INSERT INTO contact_requests (name, email, subject, message, status) VALUES ($1, $2, $3, $4, $5) RETURNING id\"\nvar id int\nerr := db.QueryRow(query, req.Name, req.Email, req.Subject, req.Message, \"new\").Scan(&id)\nif err != nil {\nlog.Printf(\"Database insert error: %v\", err)\n}\nreq.ID = id\n}\nresponse := map[string]interface{}{\n\"status\": \"received\",\n\"message\": \"Your message has been received successfully\",\n\"id\": req.ID,\n\"timestamp\": time.Now().Format(time.RFC3339),\n}\njson.NewEncoder(w).Encode(response)\n}\nfunc usersHandler(w http.ResponseWriter, r *http.Request) {\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.Header().Set(\"Access-Control-Allow-Origin\", \"*\")\nif db == nil {\nw.WriteHeader(http.StatusServiceUnavailable)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Database not available\"})\nreturn\n}\nrows, err := db.Query(\"SELECT id, email, first_name, last_name, company, created_at FROM users ORDER BY created_at DESC LIMIT 10\")\nif err != nil {\nlog.Printf(\"Database query error: %v\", err)\nw.WriteHeader(http.StatusInternalServerError)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Database error\"})\nreturn\n}\ndefer rows.Close()\nvar users []User\nfor rows.Next() {\nvar u User\nif err := rows.Scan(&u.ID, &u.Email, &u.FirstName, &u.LastName, &u.Company, &u.CreatedAt); err != nil {\nlog.Printf(\"Row scan error: %v\", err)\ncontinue\n}\nusers = append(users, u)\n}\njson.NewEncoder(w).Encode(map[string]interface{}{\"users\": users, \"total\": len(users)})\n}\nfunc authHandler(w http.ResponseWriter, r *http.Request) {\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.Header().Set(\"Access-Control-Allow-Origin\", \"*\")\nw.Header().Set(\"Access-Control-Allow-Methods\", \"POST, OPTIONS\")\nw.Header().Set(\"Access-Control-Allow-Headers\", \"Content-Type\")\nif r.Method == \"OPTIONS\" {\nw.WriteHeader(http.StatusOK)\nreturn\n}\npath := strings.TrimPrefix(r.URL.Path, \"/api/v1/auth/\")\nswitch path {\ncase \"login\":\njson.NewEncoder(w).Encode(map[string]interface{}{\n\"message\": \"Login endpoint ready\",\n\"status\": \"authentication_required\",\n\"note\": \"JWT authentication will be implemented\",\n})\ncase \"register\":\njson.NewEncoder(w).Encode(map[string]interface{}{\n\"message\": \"Registration endpoint ready\",\n\"status\": \"registration_available\",\n\"note\": \"User registration will be implemented\",\n})\ndefault:\nw.WriteHeader(http.StatusNotFound)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Auth endpoint not found\"})\n}\n}\nfunc main() {\ninitDB()\nhttp.HandleFunc(\"/api/health\", healthHandler)\nhttp.HandleFunc(\"/api/v1/cloud/services\", servicesHandler)\nhttp.HandleFunc(\"/api/v1/contact\", contactHandler)\nhttp.HandleFunc(\"/api/v1/users\", usersHandler)\nhttp.HandleFunc(\"/api/v1/auth/\", authHandler)\nport := os.Getenv(\"PORT\")\nif port == \"\" {\nport = \"8080\"\n}\nlog.Printf(\"Starting AddToCloud Full API on port %s\", port)\nlog.Printf(\"Cluster: %s\", os.Getenv(\"CLUSTER_NAME\"))\nlog.Fatal(http.ListenAndServe(\":\"+port, nil))\n}' > main.go && go mod init addtocloud-backend && go get github.com/lib/pq && go run main.go"]
+        ports:
+        - containerPort: 8080
+        env:
+        - name: CLUSTER_NAME
+          value: "Production"
+        - name: PORT
+          value: "8080"
+        - name: DB_HOST
+          value: "postgres"
+        - name: DB_USER
+          value: "addtocloud_user"
+        - name: DB_NAME
+          value: "addtocloud"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: password
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "25m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-backend-full
+  namespace: default
+spec:
+  selector:
+    app: addtocloud-backend-full
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP

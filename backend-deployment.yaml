@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-backend
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: addtocloud-backend
+  template:
+    metadata:
+      labels:
+        app: addtocloud-backend
+    spec:
+      containers:
+      - name: backend
+        image: golang:1.22-alpine
+        workingDir: /app
+        command: ["/bin/sh"]
+        args: ["-c", "echo 'package main\nimport (\n\"fmt\"\n\"log\"\n\"net/http\"\n\"os\"\n)\nfunc main() {\nhttp.HandleFunc(\"/api/health\", func(w http.ResponseWriter, r *http.Request) {\nw.Header().Set(\"Content-Type\", \"application/json\")\nfmt.Fprintf(w, `{\"status\":\"healthy\",\"message\":\"AddToCloud API is running\",\"cluster\":\"%s\",\"timestamp\":\"2025-08-30T05:45:00Z\"}`, os.Getenv(\"CLUSTER_NAME\"))\n})\nhttp.HandleFunc(\"/api/v1/cloud/services\", func(w http.ResponseWriter, r *http.Request) {\nw.Header().Set(\"Content-Type\", \"application/json\")\nfmt.Fprintf(w, `{\"services\":[{\"id\":\"compute-1\",\"name\":\"Virtual Machines\",\"description\":\"Scalable compute instances\",\"status\":\"active\",\"provider\":\"Multi-Cloud\"}],\"total\":1}`)\n})\nport := os.Getenv(\"PORT\")\nif port == \"\" {\nport = \"8080\"\n}\nlog.Printf(\"Starting AddToCloud API on port %s\", port)\nlog.Fatal(http.ListenAndServe(\":\"+port, nil))\n}' > main.go && go run main.go"]
+        ports:
+        - containerPort: 8080
+        env:
+        - name: CLUSTER_NAME
+          value: "Production"
+        - name: PORT
+          value: "8080"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-backend
+  namespace: default
+spec:
+  selector:
+    app: addtocloud-backend
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP

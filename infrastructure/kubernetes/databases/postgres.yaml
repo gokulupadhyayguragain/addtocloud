@@ -1,0 +1,249 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: addtocloud-databases
+  labels:
+    name: addtocloud-databases
+    environment: production
+---
+# PostgreSQL ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: addtocloud-databases
+data:
+  POSTGRES_DB: "addtocloud_prod"
+  POSTGRES_USER: "addtocloud"
+  POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C"
+---
+# PostgreSQL Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secret
+  namespace: addtocloud-databases
+type: Opaque
+data:
+  POSTGRES_PASSWORD: YWRkdG9jbG91ZF9zZWN1cmVfMjAyNA== # addtocloud_secure_2024
+  POSTGRES_APP_PASSWORD: YWRkdG9jbG91ZF9hcHBfc2VjdXJlXzIwMjQ= # addtocloud_app_secure_2024
+---
+# PostgreSQL PersistentVolume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-pv
+  namespace: addtocloud-databases
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /var/lib/postgresql/data
+---
+# PostgreSQL PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: addtocloud-databases
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: local-storage
+---
+# PostgreSQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: addtocloud-databases
+  labels:
+    app: postgres
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        component: database
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_INITDB_ARGS
+          valueFrom:
+            configMapKeyRef:
+              name: postgres-config
+              key: POSTGRES_INITDB_ARGS
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-init
+          mountPath: /docker-entrypoint-initdb.d
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - addtocloud
+            - -d
+            - addtocloud_prod
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - addtocloud
+            - -d
+            - addtocloud_prod
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+      - name: postgres-init
+        configMap:
+          name: postgres-init-scripts
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: addtocloud-databases
+  labels:
+    app: postgres
+    component: database
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgres
+  type: ClusterIP
+---
+# PostgreSQL Init Scripts ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: addtocloud-databases
+data:
+  01-init-schema.sql: |
+    -- AddToCloud PostgreSQL Database Initialization
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+    
+    -- Create credential_requests table
+    CREATE TABLE IF NOT EXISTS credential_requests (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        email VARCHAR(255) NOT NULL,
+        full_name VARCHAR(255) NOT NULL,
+        company VARCHAR(255) NOT NULL,
+        purpose TEXT NOT NULL,
+        requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied')),
+        admin_notes TEXT,
+        processed_at TIMESTAMP,
+        processed_by VARCHAR(255)
+    );
+    
+    -- Create user_credentials table
+    CREATE TABLE IF NOT EXISTS user_credentials (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        request_id UUID REFERENCES credential_requests(id) ON DELETE CASCADE,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        api_key VARCHAR(255) UNIQUE NOT NULL,
+        access_level VARCHAR(50) DEFAULT 'full',
+        environment VARCHAR(50) DEFAULT 'production',
+        expires_at TIMESTAMP NOT NULL DEFAULT (CURRENT_TIMESTAMP + INTERVAL '30 days'),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_accessed TIMESTAMP,
+        is_active BOOLEAN DEFAULT true,
+        access_count INTEGER DEFAULT 0
+    );
+    
+    -- Create service_access table
+    CREATE TABLE IF NOT EXISTS service_access (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        credential_id UUID REFERENCES user_credentials(id) ON DELETE CASCADE,
+        service_name VARCHAR(100) NOT NULL,
+        service_type VARCHAR(50) NOT NULL,
+        access_level VARCHAR(50) DEFAULT 'full',
+        region VARCHAR(100),
+        resource_group VARCHAR(100),
+        namespace VARCHAR(100),
+        permissions JSONB,
+        granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP,
+        is_active BOOLEAN DEFAULT true
+    );
+    
+    -- Create indexes
+    CREATE INDEX IF NOT EXISTS idx_credential_requests_email ON credential_requests(email);
+    CREATE INDEX IF NOT EXISTS idx_credential_requests_status ON credential_requests(status);
+    CREATE INDEX IF NOT EXISTS idx_user_credentials_username ON user_credentials(username);
+    CREATE INDEX IF NOT EXISTS idx_user_credentials_api_key ON user_credentials(api_key);
+    CREATE INDEX IF NOT EXISTS idx_service_access_credential_id ON service_access(credential_id);
+    
+    -- Create application user
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'addtocloud_app') THEN
+            CREATE USER addtocloud_app WITH PASSWORD 'addtocloud_app_secure_2024';
+        END IF;
+    END
+    $$;
+    
+    -- Grant permissions
+    GRANT USAGE ON SCHEMA public TO addtocloud_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO addtocloud_app;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO addtocloud_app;

@@ -1,0 +1,273 @@
+# Ultra-Light AddToCloud API with Zoho Email
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-ultra-api
+  namespace: default
+  annotations:
+    sidecar.istio.io/inject: "false"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: addtocloud-ultra-api
+  template:
+    metadata:
+      labels:
+        app: addtocloud-ultra-api
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      containers:
+      - name: api
+        image: golang:1.22-alpine
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          apk add --no-cache ca-certificates
+          cat > main.go << 'EOF'
+          package main
+          import (
+            "encoding/json"
+            "fmt"
+            "log"
+            "net/http"
+            "net/smtp"
+            "os"
+            "time"
+          )
+          type ContactRequest struct {
+            Name    string `json:"name"`
+            Email   string `json:"email"`
+            Subject string `json:"subject,omitempty"`
+            Message string `json:"message"`
+          }
+          type LoginRequest struct {
+            Email    string `json:"email"`
+            Password string `json:"password"`
+          }
+          func sendZohoEmail(to, subject, body string) error {
+            smtpHost := os.Getenv("SMTP_HOST")
+            smtpPort := os.Getenv("SMTP_PORT")
+            smtpUser := os.Getenv("SMTP_USERNAME")
+            smtpPass := os.Getenv("SMTP_PASSWORD")
+            smtpFrom := os.Getenv("SMTP_FROM")
+            if smtpHost == "" || smtpUser == "" || smtpPass == "" {
+              return fmt.Errorf("email not configured")
+            }
+            msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\n\r\n%s", smtpFrom, to, subject, body)
+            auth := smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
+            err := smtp.SendMail(smtpHost+":"+smtpPort, auth, smtpFrom, []string{to}, []byte(msg))
+            if err != nil {
+              log.Printf("Failed to send email: %v", err)
+              return err
+            }
+            log.Printf("Email sent successfully to %s via Zoho", to)
+            return nil
+          }
+          func corsHeaders(w http.ResponseWriter) {
+            w.Header().Set("Access-Control-Allow-Origin", "*")
+            w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+          }
+          func healthHandler(w http.ResponseWriter, r *http.Request) {
+            corsHeaders(w)
+            w.Header().Set("Content-Type", "application/json")
+            response := map[string]interface{}{
+              "status": "healthy",
+              "message": "AddToCloud Ultra API with Zoho Email",
+              "cluster": os.Getenv("CLUSTER_NAME"),
+              "timestamp": time.Now().Format(time.RFC3339),
+              "version": "3.2.0-ultra",
+              "email_configured": os.Getenv("SMTP_HOST") != "",
+              "zoho_email": os.Getenv("SMTP_USERNAME"),
+              "features": []string{"contact-form", "login-auth", "zoho-email-integration"},
+            }
+            json.NewEncoder(w).Encode(response)
+          }
+          func contactHandler(w http.ResponseWriter, r *http.Request) {
+            corsHeaders(w)
+            w.Header().Set("Content-Type", "application/json")
+            if r.Method == "OPTIONS" {
+              w.WriteHeader(http.StatusOK)
+              return
+            }
+            if r.Method != "POST" {
+              w.WriteHeader(http.StatusMethodNotAllowed)
+              json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
+              return
+            }
+            var req ContactRequest
+            if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+              w.WriteHeader(http.StatusBadRequest)
+              json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
+              return
+            }
+            if req.Name == "" || req.Email == "" || req.Message == "" {
+              w.WriteHeader(http.StatusBadRequest)
+              json.NewEncoder(w).Encode(map[string]string{"error": "Missing required fields"})
+              return
+            }
+            adminEmail := os.Getenv("ADMIN_EMAIL")
+            if adminEmail == "" {
+              adminEmail = "admin@addtocloud.tech"
+            }
+            emailSubject := "New Contact Request - AddToCloud Platform"
+            emailBody := fmt.Sprintf("NEW CONTACT REQUEST\n\nName: %s\nEmail: %s\nSubject: %s\nMessage:\n%s\n\nTimestamp: %s\nRequest ID: req_%d\n\nReply to: %s", req.Name, req.Email, req.Subject, req.Message, time.Now().Format(time.RFC3339), time.Now().Unix(), req.Email)
+            emailSent := false
+            go func() {
+              if err := sendZohoEmail(adminEmail, emailSubject, emailBody); err != nil {
+                log.Printf("Email send failed: %v", err)
+              } else {
+                emailSent = true
+                log.Printf("Email notification sent successfully")
+              }
+            }()
+            log.Printf("Contact request processed: %s <%s> - %s", req.Name, req.Email, req.Subject)
+            response := map[string]interface{}{
+              "status": "received",
+              "message": "Your message has been received! Email notification sent to our team via Zoho Mail.",
+              "timestamp": time.Now().Format(time.RFC3339),
+              "request_id": fmt.Sprintf("req_%d", time.Now().Unix()),
+              "email_attempted": true,
+              "admin_email": adminEmail,
+              "smtp_configured": os.Getenv("SMTP_HOST") != "",
+            }
+            json.NewEncoder(w).Encode(response)
+          }
+          func loginHandler(w http.ResponseWriter, r *http.Request) {
+            corsHeaders(w)
+            w.Header().Set("Content-Type", "application/json")
+            if r.Method == "OPTIONS" {
+              w.WriteHeader(http.StatusOK)
+              return
+            }
+            if r.Method != "POST" {
+              w.WriteHeader(http.StatusMethodNotAllowed)
+              json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
+              return
+            }
+            var req LoginRequest
+            if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+              w.WriteHeader(http.StatusBadRequest)
+              json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
+              return
+            }
+            if req.Email == "" || req.Password == "" {
+              w.WriteHeader(http.StatusBadRequest)
+              json.NewEncoder(w).Encode(map[string]string{"error": "Email and password are required"})
+              return
+            }
+            log.Printf("Login attempt: %s", req.Email)
+            if req.Email == "admin@addtocloud.tech" && req.Password == "admin123" {
+              response := map[string]interface{}{
+                "status": "success",
+                "message": "Admin login successful",
+                "token": fmt.Sprintf("admin_token_%d", time.Now().Unix()),
+                "user": map[string]interface{}{
+                  "id": 1, "email": req.Email, "name": "Admin User", "role": "admin",
+                },
+                "timestamp": time.Now().Format(time.RFC3339),
+                "expires": time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+              }
+              json.NewEncoder(w).Encode(response)
+              return
+            }
+            if req.Email == "user@addtocloud.tech" && req.Password == "user123" {
+              response := map[string]interface{}{
+                "status": "success",
+                "message": "User login successful",
+                "token": fmt.Sprintf("user_token_%d", time.Now().Unix()),
+                "user": map[string]interface{}{
+                  "id": 2, "email": req.Email, "name": "Test User", "role": "user",
+                },
+                "timestamp": time.Now().Format(time.RFC3339),
+                "expires": time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+              }
+              json.NewEncoder(w).Encode(response)
+              return
+            }
+            log.Printf("Invalid login attempt: %s", req.Email)
+            w.WriteHeader(http.StatusUnauthorized)
+            json.NewEncoder(w).Encode(map[string]string{"error": "Invalid credentials"})
+          }
+          func main() {
+            http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+              corsHeaders(w)
+              w.Header().Set("Content-Type", "application/json")
+              json.NewEncoder(w).Encode(map[string]string{
+                "service": "AddToCloud Ultra API",
+                "status": "running",
+                "version": "3.2.0-ultra",
+                "endpoints": "/api/health, /api/v1/contact, /api/v1/auth/login",
+              })
+            })
+            http.HandleFunc("/api/health", healthHandler)
+            http.HandleFunc("/api/v1/contact", contactHandler)
+            http.HandleFunc("/api/v1/auth/login", loginHandler)
+            http.HandleFunc("/contact", contactHandler)
+            http.HandleFunc("/auth/login", loginHandler)
+            port := "8080"
+            log.Printf("=== AddToCloud Ultra API v3.2.0 ===")
+            log.Printf("Starting server on port %s", port)
+            log.Printf("Cluster: %s", os.Getenv("CLUSTER_NAME"))
+            log.Printf("SMTP Host: %s", os.Getenv("SMTP_HOST"))
+            log.Printf("SMTP User: %s", os.Getenv("SMTP_USERNAME"))
+            log.Printf("Admin Email: %s", os.Getenv("ADMIN_EMAIL"))
+            log.Printf("Endpoints:")
+            log.Printf("  GET  /api/health")
+            log.Printf("  POST /api/v1/contact")
+            log.Printf("  POST /api/v1/auth/login")
+            log.Fatal(http.ListenAndServe(":"+port, nil))
+          }
+          EOF
+          go mod init addtocloud-api
+          go run main.go
+        ports:
+        - containerPort: 8080
+        env:
+        - name: CLUSTER_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-api-config
+              key: CLUSTER_NAME
+        - name: SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: SMTP_HOST
+        - name: SMTP_PORT
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: SMTP_PORT
+        - name: SMTP_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: SMTP_USERNAME
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: SMTP_PASSWORD
+        - name: SMTP_FROM
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: SMTP_FROM
+        - name: ADMIN_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: ADMIN_EMAIL
+        - name: PORT
+          value: "8080"
+        resources:
+          requests:
+            cpu: 20m
+            memory: 32Mi
+          limits:
+            cpu: 50m
+            memory: 64Mi

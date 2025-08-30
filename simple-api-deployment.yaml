@@ -1,0 +1,184 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-simple-api
+  namespace: default
+  annotations:
+    # Disable Istio injection for this deployment
+    sidecar.istio.io/inject: "false"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: addtocloud-simple-api
+  template:
+    metadata:
+      labels:
+        app: addtocloud-simple-api
+      annotations:
+        # Explicitly disable Istio injection
+        sidecar.istio.io/inject: "false"
+    spec:
+      containers:
+      - name: api
+        image: golang:1.22-alpine
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          echo 'package main
+          import (
+          "encoding/json"
+          "fmt"
+          "log"
+          "net/http"
+          "os"
+          "time"
+          )
+          type ContactRequest struct {
+          Name string `json:"name"`
+          Email string `json:"email"`
+          Subject string `json:"subject"`
+          Message string `json:"message"`
+          }
+          func healthHandler(w http.ResponseWriter, r *http.Request) {
+          w.Header().Set("Content-Type", "application/json")
+          w.Header().Set("Access-Control-Allow-Origin", "*")
+          cluster := os.Getenv("CLUSTER_NAME")
+          if cluster == "" {
+          cluster = "AWS-EKS"
+          }
+          response := map[string]interface{}{
+          "status": "healthy",
+          "message": "AddToCloud API is running",
+          "cluster": cluster,
+          "timestamp": time.Now().Format(time.RFC3339),
+          "version": "1.0.0",
+          }
+          json.NewEncoder(w).Encode(response)
+          }
+          func contactHandler(w http.ResponseWriter, r *http.Request) {
+          w.Header().Set("Content-Type", "application/json")
+          w.Header().Set("Access-Control-Allow-Origin", "*")
+          w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+          w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+          if r.Method == "OPTIONS" {
+          w.WriteHeader(http.StatusOK)
+          return
+          }
+          if r.Method != "POST" {
+          w.WriteHeader(http.StatusMethodNotAllowed)
+          json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
+          return
+          }
+          var req ContactRequest
+          if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+          w.WriteHeader(http.StatusBadRequest)
+          json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
+          return
+          }
+          if req.Name == "" || req.Email == "" || req.Message == "" {
+          w.WriteHeader(http.StatusBadRequest)
+          json.NewEncoder(w).Encode(map[string]string{"error": "Missing required fields"})
+          return
+          }
+          log.Printf("Contact request received: Name=%s, Email=%s, Subject=%s", req.Name, req.Email, req.Subject)
+          response := map[string]interface{}{
+          "status": "received",
+          "message": "Your message has been received successfully",
+          "timestamp": time.Now().Format(time.RFC3339),
+          }
+          json.NewEncoder(w).Encode(response)
+          }
+          func loginHandler(w http.ResponseWriter, r *http.Request) {
+          w.Header().Set("Content-Type", "application/json")
+          w.Header().Set("Access-Control-Allow-Origin", "*")
+          w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+          w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+          if r.Method == "OPTIONS" {
+          w.WriteHeader(http.StatusOK)
+          return
+          }
+          if r.Method != "POST" {
+          w.WriteHeader(http.StatusMethodNotAllowed)
+          json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
+          return
+          }
+          var req map[string]string
+          if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+          w.WriteHeader(http.StatusBadRequest)
+          json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
+          return
+          }
+          email := req["email"]
+          password := req["password"]
+          if email == "" || password == "" {
+          w.WriteHeader(http.StatusBadRequest)
+          json.NewEncoder(w).Encode(map[string]string{"error": "Email and password are required"})
+          return
+          }
+          log.Printf("Login attempt for email: %s", email)
+          if email == "admin@addtocloud.tech" && password == "admin123" {
+          response := map[string]interface{}{
+          "status": "success",
+          "message": "Login successful",
+          "token": "demo-jwt-token-123",
+          "user": map[string]string{
+          "email": email,
+          "name": "Admin User",
+          "role": "admin",
+          },
+          "timestamp": time.Now().Format(time.RFC3339),
+          }
+          json.NewEncoder(w).Encode(response)
+          } else {
+          w.WriteHeader(http.StatusUnauthorized)
+          json.NewEncoder(w).Encode(map[string]string{"error": "Invalid credentials"})
+          }
+          }
+          func main() {
+          http.HandleFunc("/contact", contactHandler)
+          http.HandleFunc("/auth/login", loginHandler)
+          http.HandleFunc("/api/health", healthHandler)
+          http.HandleFunc("/api/v1/contact", contactHandler)
+          http.HandleFunc("/api/v1/auth/login", loginHandler)
+          port := os.Getenv("PORT")
+          if port == "" {
+          port = "8080"
+          }
+          log.Printf("Starting AddToCloud API on port %s", port)
+          log.Printf("Cluster: %s", os.Getenv("CLUSTER_NAME"))
+          log.Printf("Health endpoint: /api/health")
+          log.Printf("Contact endpoint: /contact and /api/v1/contact")
+          log.Printf("Login endpoint: /auth/login and /api/v1/auth/login")
+          log.Fatal(http.ListenAndServe(":"+port, nil))
+          }' > main.go && go mod init addtocloud-api && go run main.go
+        ports:
+        - containerPort: 8080
+        env:
+        - name: CLUSTER_NAME
+          value: "AWS-EKS"
+        - name: PORT
+          value: "8080"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+        workingDir: /app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-simple-api-service
+  namespace: default
+spec:
+  selector:
+    app: addtocloud-simple-api
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: LoadBalancer

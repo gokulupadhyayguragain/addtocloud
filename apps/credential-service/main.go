@@ -442,7 +442,7 @@ func main() {
 		})
 	})
 
-	port := getEnv("API_PORT", "8080")
+	port := getEnv("PORT", "8080")
 	log.Printf("🚀 AddToCloud Credential Service v2.0 starting on port %s", port)
 	log.Printf("📧 Access requests will be sent to: %s", emailService.To)
 	log.Printf("🔐 Manual approval required - credentials sent to admin for review")

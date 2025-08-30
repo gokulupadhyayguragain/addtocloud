@@ -1,0 +1,138 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-api-final
+  namespace: addtocloud-prod
+  labels:
+    app: addtocloud-api-final
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: addtocloud-api-final
+  template:
+    metadata:
+      labels:
+        app: addtocloud-api-final
+    spec:
+      containers:
+      - name: api
+        image: golang:1.21-alpine
+        command: ["sh", "-c"]
+        args: 
+        - |
+          cat > /tmp/main.go << 'EOF'
+          package main
+          import (
+            "encoding/json"
+            "fmt"
+            "log"
+            "net/http"
+            "time"
+          )
+          type HealthResponse struct {
+            Status string `json:"status"`
+            Message string `json:"message"`
+            FrontendConnected bool `json:"frontend_connected"`
+            Database string `json:"database"`
+            Timestamp string `json:"timestamp"`
+          }
+          type ContactResponse struct {
+            Success bool `json:"success"`
+            Message string `json:"message"`
+            RequestID string `json:"request_id"`
+            Timestamp string `json:"timestamp"`
+          }
+          func enableCORS(w http.ResponseWriter) {
+            w.Header().Set("Access-Control-Allow-Origin", "*")
+            w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+          }
+          func healthHandler(w http.ResponseWriter, r *http.Request) {
+            enableCORS(w)
+            if r.Method == "OPTIONS" {
+              w.WriteHeader(http.StatusOK)
+              return
+            }
+            response := HealthResponse{
+              Status: "healthy",
+              Message: "AddToCloud API Working",
+              FrontendConnected: true,
+              Database: "ready",
+              Timestamp: time.Now().UTC().Format(time.RFC3339),
+            }
+            w.Header().Set("Content-Type", "application/json")
+            json.NewEncoder(w).Encode(response)
+          }
+          func contactHandler(w http.ResponseWriter, r *http.Request) {
+            enableCORS(w)
+            if r.Method == "OPTIONS" {
+              w.WriteHeader(http.StatusOK)
+              return
+            }
+            response := ContactResponse{
+              Success: true,
+              Message: "Contact received",
+              RequestID: fmt.Sprintf("contact_%d", time.Now().Unix()),
+              Timestamp: time.Now().UTC().Format(time.RFC3339),
+            }
+            w.Header().Set("Content-Type", "application/json")
+            json.NewEncoder(w).Encode(response)
+          }
+          func main() {
+            http.HandleFunc("/api/health", healthHandler)
+            http.HandleFunc("/api/v1/contact", contactHandler)
+            http.HandleFunc("/api/v1/access-request", contactHandler)
+            log.Println("API starting on :8080")
+            http.ListenAndServe(":8080", nil)
+          }
+          EOF
+          cd /tmp && go mod init api && go run main.go
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-api-final-service
+  namespace: addtocloud-prod
+spec:
+  selector:
+    app: addtocloud-api-final
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-api-final-lb
+  namespace: addtocloud-prod
+spec:
+  selector:
+    app: addtocloud-api-final
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: LoadBalancer

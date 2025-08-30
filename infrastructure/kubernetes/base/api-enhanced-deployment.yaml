@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-api-enhanced
+  namespace: addtocloud-prod
+  labels:
+    app: addtocloud-api-enhanced
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: addtocloud-api-enhanced
+  template:
+    metadata:
+      labels:
+        app: addtocloud-api-enhanced
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: api-config
+          mountPath: /etc/nginx/conf.d
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: api-config
+        configMap:
+          name: api-config-enhanced
+          items:
+          - key: api-config-enhanced.conf
+            path: default.conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-api-enhanced-service
+  namespace: addtocloud-prod
+spec:
+  selector:
+    app: addtocloud-api-enhanced
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP

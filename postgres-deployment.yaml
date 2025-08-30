@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "addtocloud"
+        - name: POSTGRES_USER
+          value: "addtocloud_user"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: password
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-init
+          mountPath: /docker-entrypoint-initdb.d
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+      volumes:
+      - name: postgres-storage
+        emptyDir: {}
+      - name: postgres-init
+        configMap:
+          name: postgres-init-sql
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: default
+type: Opaque
+data:
+  # Base64 encoded: addtocloud_secure_password_2025
+  password: YWRkdG9jbG91ZF9zZWN1cmVfcGFzc3dvcmRfMjAyNQ==
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-sql
+  namespace: default
+data:
+  init.sql: |
+    -- AddToCloud Database Schema
+    CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        first_name VARCHAR(100),
+        last_name VARCHAR(100),
+        company VARCHAR(200),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_active BOOLEAN DEFAULT true
+    );
+
+    CREATE TABLE IF NOT EXISTS cloud_services (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        description TEXT,
+        provider VARCHAR(50),
+        status VARCHAR(20) DEFAULT 'active',
+        pricing_model VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS user_deployments (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        service_id INTEGER REFERENCES cloud_services(id),
+        deployment_name VARCHAR(100) NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        configuration JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS contact_requests (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        subject VARCHAR(200),
+        message TEXT NOT NULL,
+        status VARCHAR(20) DEFAULT 'new',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- Insert sample data
+    INSERT INTO cloud_services (name, description, provider, pricing_model) VALUES
+    ('Virtual Machines', 'Scalable compute instances with flexible configurations', 'Multi-Cloud', 'pay-per-hour'),
+    ('Object Storage', 'Highly available and durable object storage service', 'Multi-Cloud', 'pay-per-gb'),
+    ('Managed Database', 'Fully managed PostgreSQL and MongoDB hosting', 'Multi-Cloud', 'pay-per-instance'),
+    ('Global CDN', 'Content delivery network with worldwide edge locations', 'Multi-Cloud', 'pay-per-request'),
+    ('Container Registry', 'Private Docker container registry with security scanning', 'Multi-Cloud', 'pay-per-gb'),
+    ('Load Balancer', 'Application and network load balancing service', 'Multi-Cloud', 'pay-per-hour');
+
+    -- Create indexes for performance
+    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+    CREATE INDEX IF NOT EXISTS idx_deployments_user_id ON user_deployments(user_id);
+    CREATE INDEX IF NOT EXISTS idx_contact_requests_status ON contact_requests(status);
+    CREATE INDEX IF NOT EXISTS idx_contact_requests_created_at ON contact_requests(created_at);
+
+    -- Insert admin user (password: addtocloud123)
+    INSERT INTO users (email, password_hash, first_name, last_name, company) VALUES
+    ('admin@addtocloud.tech', '$2a$10$rQS0PfkXjNjXjjWj/fwLbeuJ9.zJzQJQzJLJnzBpPwJzJLzQJQz', 'Admin', 'User', 'AddToCloud')
+    ON CONFLICT (email) DO NOTHING;

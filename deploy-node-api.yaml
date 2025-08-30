@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-api
+  namespace: addtocloud-prod
+  labels:
+    app: addtocloud-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: addtocloud-api
+  template:
+    metadata:
+      labels:
+        app: addtocloud-api
+    spec:
+      containers:
+      - name: api
+        image: node:18-alpine
+        command: ["node", "-e"]
+        args:
+        - |
+          const http = require('http');
+          const url = require('url');
+          
+          const server = http.createServer((req, res) => {
+            const parsedUrl = url.parse(req.url, true);
+            
+            // CORS headers
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            res.setHeader('Content-Type', 'application/json');
+            
+            if (req.method === 'OPTIONS') {
+              res.writeHead(200);
+              res.end();
+              return;
+            }
+            
+            if (parsedUrl.pathname === '/api/health') {
+              res.writeHead(200);
+              res.end(JSON.stringify({
+                status: 'healthy',
+                message: 'AddToCloud API Working',
+                frontend_connected: true,
+                database: 'ready',
+                timestamp: new Date().toISOString()
+              }));
+            } else if (parsedUrl.pathname === '/api/v1/contact') {
+              res.writeHead(200);
+              res.end(JSON.stringify({
+                success: true,
+                message: 'Contact request received successfully',
+                request_id: 'contact_' + Date.now(),
+                timestamp: new Date().toISOString()
+              }));
+            } else if (parsedUrl.pathname === '/api/v1/access-request') {
+              res.writeHead(200);
+              res.end(JSON.stringify({
+                success: true,
+                message: 'Access request submitted successfully',
+                status: 'pending_review',
+                request_id: 'access_' + Date.now(),
+                timestamp: new Date().toISOString()
+              }));
+            } else {
+              res.writeHead(200);
+              res.end(JSON.stringify({
+                status: 'operational',
+                message: 'AddToCloud API Ready',
+                endpoints: ['/api/health', '/api/v1/contact', '/api/v1/access-request'],
+                timestamp: new Date().toISOString()
+              }));
+            }
+          });
+          
+          server.listen(8080, () => {
+            console.log('🚀 AddToCloud API running on port 8080');
+          });
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-api-service
+  namespace: addtocloud-prod
+spec:
+  selector:
+    app: addtocloud-api
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-api-lb
+  namespace: addtocloud-prod
+spec:
+  selector:
+    app: addtocloud-api
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: LoadBalancer

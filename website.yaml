@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-website
+  namespace: addtocloud
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: addtocloud-website
+  template:
+    metadata:
+      labels:
+        app: addtocloud-website
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: html
+        configMap:
+          name: addtocloud-html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-website
+  namespace: addtocloud
+spec:
+  selector:
+    app: addtocloud-website
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP

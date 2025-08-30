@@ -1,0 +1,184 @@
+---
+# Enterprise DNS and SSL Configuration for AddToCloud.tech
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: addtocloud-enterprise
+  labels:
+    istio-injection: enabled
+    name: addtocloud-enterprise
+---
+# SSL Certificate for HTTPS
+apiVersion: v1
+kind: Secret
+metadata:
+  name: addtocloud-tls-secret
+  namespace: addtocloud-prod
+type: kubernetes.io/tls
+data:
+  # This will be replaced with actual cert data
+  tls.crt: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t
+  tls.key: LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t
+---
+# Enterprise Gateway with HTTPS
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: addtocloud-enterprise-gateway
+  namespace: addtocloud-prod
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - addtocloud.tech
+    - api.addtocloud.tech
+    - grafana.addtocloud.tech
+    - monitoring.addtocloud.tech
+    - admin.addtocloud.tech
+    tls:
+      httpsRedirect: true  # Redirect HTTP to HTTPS
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts:
+    - addtocloud.tech
+    - api.addtocloud.tech
+    - grafana.addtocloud.tech
+    - monitoring.addtocloud.tech
+    - admin.addtocloud.tech
+    tls:
+      mode: SIMPLE
+      credentialName: addtocloud-tls-secret
+---
+# Enterprise VirtualService with advanced routing
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: addtocloud-enterprise-vs
+  namespace: addtocloud-prod
+spec:
+  hosts:
+  - addtocloud.tech
+  - api.addtocloud.tech
+  - grafana.addtocloud.tech
+  - monitoring.addtocloud.tech
+  - admin.addtocloud.tech
+  gateways:
+  - addtocloud-enterprise-gateway
+  http:
+  # API Routes with rate limiting and advanced features
+  - match:
+    - uri:
+        prefix: "/api/"
+    headers:
+      request:
+        add:
+          X-Request-Source: "enterprise-gateway"
+          X-API-Version: "v5.0"
+    fault:
+      delay:
+        percentage:
+          value: 0.1
+        fixedDelay: 2s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+      retryOn: 5xx,gateway-error,connect-failure,refused-stream
+    route:
+    - destination:
+        host: addtocloud-backend
+        port:
+          number: 8080
+      weight: 100
+    timeout: 30s
+    corsPolicy:
+      allowOrigins:
+      - exact: "https://addtocloud.tech"
+      - exact: "https://admin.addtocloud.tech"
+      allowMethods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+      allowHeaders:
+      - Authorization
+      - Content-Type
+      - X-API-Key
+      allowCredentials: true
+  # Grafana monitoring dashboard
+  - match:
+    - headers:
+        host:
+          exact: grafana.addtocloud.tech
+    route:
+    - destination:
+        host: grafana.monitoring.svc.cluster.local
+        port:
+          number: 3000
+  # Prometheus monitoring
+  - match:
+    - headers:
+        host:
+          exact: monitoring.addtocloud.tech
+    route:
+    - destination:
+        host: prometheus.monitoring.svc.cluster.local
+        port:
+          number: 9090
+  # Admin dashboard (future)
+  - match:
+    - headers:
+        host:
+          exact: admin.addtocloud.tech
+    route:
+    - destination:
+        host: addtocloud-admin
+        port:
+          number: 80
+  # Main website (fallback)
+  - match:
+    - uri:
+        prefix: "/"
+    headers:
+      response:
+        add:
+          X-Served-By: "AddToCloud-Enterprise"
+          X-Version: "5.0.0-enterprise"
+          X-Security: "Istio-mTLS-Enabled"
+    route:
+    - destination:
+        host: addtocloud-frontend
+        port:
+          number: 80
+---
+# Enterprise Load Balancer with SSL termination
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-enterprise-lb
+  namespace: addtocloud-prod
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "arn:aws:acm:us-west-2:741448922544:certificate/your-cert-arn"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "443"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+spec:
+  type: LoadBalancer
+  selector:
+    istio: ingressgateway
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8443
+    protocol: TCP

@@ -33,21 +33,36 @@ export default function RequestAccess() {
     setError('')
 
     try {
-      const response = await fetch('http://localhost:8080/api/v1/auth/request-access', {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://addtocloud-api-proxy.gocools.workers.dev';
+      const apiUrl = `${apiBaseUrl}/api/v1/contact`;
+      console.log('Submitting to API:', apiUrl);
+      console.log('Form data:', formData);
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(formData)
       })
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
 
       if (response.ok) {
+        const result = await response.json();
+        console.log('Success response:', result);
         setIsSubmitted(true)
       } else {
-        throw new Error('Failed to submit request')
+        const errorData = await response.text();
+        console.error('Error response:', errorData);
+        throw new Error(`HTTP ${response.status}: ${errorData}`)
       }
     } catch (err) {
-      setError('Failed to submit request. Please try again.')
+      console.error('Full error details:', err);
+      console.error('Error name:', err.name);
+      console.error('Error message:', err.message);
+      setError(`Failed to submit request. Please try again. Error: ${err.message}`)
     } finally {
       setIsSubmitting(false)
     }

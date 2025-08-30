@@ -1,0 +1,187 @@
+# Istio Service Mesh Configuration for AddToCloud
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: addtocloud-gateway
+  namespace: addtocloud-prod
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - addtocloud.tech
+    - api.addtocloud.tech
+    - "*.addtocloud.tech"
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: addtocloud-tls
+    hosts:
+    - addtocloud.tech
+    - api.addtocloud.tech
+    - "*.addtocloud.tech"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: addtocloud-virtualservice
+  namespace: addtocloud-prod
+spec:
+  hosts:
+  - addtocloud.tech
+  - api.addtocloud.tech
+  gateways:
+  - addtocloud-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /api/
+    route:
+    - destination:
+        host: addtocloud-backend
+        port:
+          number: 8080
+    fault:
+      delay:
+        percentage:
+          value: 0.1
+        fixedDelay: 5s
+    retries:
+      attempts: 3
+      perTryTimeout: 10s
+    timeout: 30s
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: addtocloud-frontend
+        port:
+          number: 80
+    headers:
+      response:
+        add:
+          X-Served-By: "Istio-Gateway"
+          X-Version: "5.0.0-production"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: addtocloud-backend-destination
+  namespace: addtocloud-prod
+spec:
+  host: addtocloud-backend
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 10
+      http:
+        http1MaxPendingRequests: 10
+        maxRequestsPerConnection: 2
+    loadBalancer:
+      simple: LEAST_CONN
+    outlierDetection:
+      consecutiveErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: addtocloud-frontend-destination
+  namespace: addtocloud-prod
+spec:
+  host: addtocloud-frontend
+  trafficPolicy:
+    connectionPool:
+      tcp:
+        maxConnections: 20
+      http:
+        http1MaxPendingRequests: 20
+        maxRequestsPerConnection: 5
+    loadBalancer:
+      simple: ROUND_ROBIN
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+---
+# Service Monitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: addtocloud-backend-monitor
+  namespace: addtocloud-prod
+  labels:
+    app: addtocloud-backend
+spec:
+  selector:
+    matchLabels:
+      app: addtocloud-backend
+  endpoints:
+  - port: http
+    path: /api/health
+    interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: addtocloud-frontend-monitor
+  namespace: addtocloud-prod
+  labels:
+    app: addtocloud-frontend
+spec:
+  selector:
+    matchLabels:
+      app: addtocloud-frontend
+  endpoints:
+  - port: http
+    path: /
+    interval: 30s
+---
+# PeerAuthentication for mTLS
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: addtocloud-mtls
+  namespace: addtocloud-prod
+spec:
+  mtls:
+    mode: STRICT
+---
+# AuthorizationPolicy
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: addtocloud-authz
+  namespace: addtocloud-prod
+spec:
+  selector:
+    matchLabels:
+      app: addtocloud-backend
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/addtocloud-prod/sa/default"]
+    to:
+    - operation:
+        methods: ["GET", "POST"]
+        paths: ["/api/*"]
+  - from:
+    - source:
+        namespaces: ["istio-system"]
+    to:
+    - operation:
+        methods: ["GET"]
+        paths: ["/api/health"]

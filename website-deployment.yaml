@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-website
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: addtocloud-website
+  template:
+    metadata:
+      labels:
+        app: addtocloud-website
+    spec:
+      containers:
+      - name: frontend
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: website-content
+          mountPath: /usr/share/nginx/html/index.html
+          subPath: index.html
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "32Mi"
+            cpu: "25m"
+      volumes:
+      - name: website-content
+        configMap:
+          name: addtocloud-website-content
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-website
+  namespace: default
+spec:
+  selector:
+    app: addtocloud-website
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+  type: ClusterIP

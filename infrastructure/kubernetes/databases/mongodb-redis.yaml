@@ -1,0 +1,348 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-config
+  namespace: addtocloud-databases
+data:
+  MONGO_INITDB_DATABASE: "addtocloud_logs"
+---
+# MongoDB Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-secret
+  namespace: addtocloud-databases
+type: Opaque
+data:
+  MONGO_INITDB_ROOT_USERNAME: YWRkdG9jbG91ZA== # addtocloud
+  MONGO_INITDB_ROOT_PASSWORD: YWRkdG9jbG91ZF9tb25nb18yMDI0 # addtocloud_mongo_2024
+---
+# MongoDB PersistentVolume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv
+  namespace: addtocloud-databases
+spec:
+  capacity:
+    storage: 20Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  hostPath:
+    path: /var/lib/mongodb/data
+---
+# MongoDB PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+  namespace: addtocloud-databases
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: local-storage
+---
+# MongoDB Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+  namespace: addtocloud-databases
+  labels:
+    app: mongodb
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+        component: database
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo:7.0
+        ports:
+        - containerPort: 27017
+          name: mongodb
+        env:
+        - name: MONGO_INITDB_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: MONGO_INITDB_ROOT_USERNAME
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mongodb-secret
+              key: MONGO_INITDB_ROOT_PASSWORD
+        - name: MONGO_INITDB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: mongodb-config
+              key: MONGO_INITDB_DATABASE
+        volumeMounts:
+        - name: mongodb-storage
+          mountPath: /data/db
+        - name: mongodb-config-storage
+          mountPath: /data/configdb
+        - name: mongodb-init
+          mountPath: /docker-entrypoint-initdb.d
+        livenessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - mongosh
+            - --eval
+            - "db.adminCommand('ping')"
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: mongodb-storage
+        persistentVolumeClaim:
+          claimName: mongodb-pvc
+      - name: mongodb-config-storage
+        emptyDir: {}
+      - name: mongodb-init
+        configMap:
+          name: mongodb-init-scripts
+---
+# MongoDB Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-service
+  namespace: addtocloud-databases
+  labels:
+    app: mongodb
+    component: database
+spec:
+  selector:
+    app: mongodb
+  ports:
+  - port: 27017
+    targetPort: 27017
+    name: mongodb
+  type: ClusterIP
+---
+# MongoDB Init Scripts ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-init-scripts
+  namespace: addtocloud-databases
+data:
+  01-init-collections.js: |
+    // AddToCloud MongoDB Initialization
+    db = db.getSiblingDB('addtocloud_logs');
+    
+    // Create application logs collection
+    db.createCollection("application_logs", {
+       validator: {
+          $jsonSchema: {
+             bsonType: "object",
+             required: ["timestamp", "level", "service", "message"],
+             properties: {
+                timestamp: { bsonType: "date" },
+                level: { 
+                   bsonType: "string",
+                   enum: ["ERROR", "WARN", "INFO", "DEBUG", "TRACE"]
+                },
+                service: { bsonType: "string" },
+                message: { bsonType: "string" },
+                metadata: { bsonType: "object" },
+                user_id: { bsonType: "string" },
+                request_id: { bsonType: "string" },
+                ip_address: { bsonType: "string" }
+             }
+          }
+       }
+    });
+    
+    // Create security events collection
+    db.createCollection("security_events", {
+       validator: {
+          $jsonSchema: {
+             bsonType: "object",
+             required: ["timestamp", "event_type", "severity", "source"],
+             properties: {
+                timestamp: { bsonType: "date" },
+                event_type: { 
+                   bsonType: "string",
+                   enum: ["login", "logout", "failed_login", "credential_request", "credential_approved", "credential_denied", "api_access", "unauthorized_access"]
+                },
+                severity: {
+                   bsonType: "string",
+                   enum: ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+                },
+                source: { bsonType: "string" },
+                user_id: { bsonType: "string" },
+                ip_address: { bsonType: "string" },
+                user_agent: { bsonType: "string" },
+                details: { bsonType: "object" }
+             }
+          }
+       }
+    });
+    
+    // Create performance metrics collection
+    db.createCollection("performance_metrics", {
+       validator: {
+          $jsonSchema: {
+             bsonType: "object",
+             required: ["timestamp", "service", "metric_name", "value"],
+             properties: {
+                timestamp: { bsonType: "date" },
+                service: { bsonType: "string" },
+                metric_name: { bsonType: "string" },
+                value: { bsonType: "number" },
+                unit: { bsonType: "string" },
+                tags: { bsonType: "object" }
+             }
+          }
+       }
+    });
+    
+    // Create indexes
+    db.application_logs.createIndex({ "timestamp": -1 });
+    db.application_logs.createIndex({ "level": 1 });
+    db.application_logs.createIndex({ "service": 1 });
+    db.security_events.createIndex({ "timestamp": -1 });
+    db.security_events.createIndex({ "event_type": 1 });
+    db.security_events.createIndex({ "severity": 1 });
+    db.performance_metrics.createIndex({ "timestamp": -1 });
+    db.performance_metrics.createIndex({ "service": 1 });
+    
+    // TTL indexes for automatic cleanup
+    db.application_logs.createIndex({ "timestamp": 1 }, { expireAfterSeconds: 7776000 }); // 90 days
+    db.security_events.createIndex({ "timestamp": 1 }, { expireAfterSeconds: 15552000 }); // 180 days
+    db.performance_metrics.createIndex({ "timestamp": 1 }, { expireAfterSeconds: 2592000 }); // 30 days
+    
+    print("MongoDB initialization completed successfully!");
+---
+# Redis ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-config
+  namespace: addtocloud-databases
+data:
+  redis.conf: |
+    requirepass addtocloud_redis_2024
+    appendonly yes
+    appendfsync everysec
+    maxmemory 512mb
+    maxmemory-policy allkeys-lru
+    save 900 1
+    save 300 10
+    save 60 10000
+---
+# Redis Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: addtocloud-databases
+  labels:
+    app: redis
+    component: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        component: cache
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        command:
+        - redis-server
+        - /etc/redis/redis.conf
+        volumeMounts:
+        - name: redis-config
+          mountPath: /etc/redis
+        - name: redis-storage
+          mountPath: /data
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "250m"
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-config
+      - name: redis-storage
+        emptyDir: {}
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: addtocloud-databases
+  labels:
+    app: redis
+    component: cache
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  type: ClusterIP

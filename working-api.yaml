@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-api
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: addtocloud-api
+  template:
+    metadata:
+      labels:
+        app: addtocloud-api
+    spec:
+      containers:
+      - name: api
+        image: golang:1.22-alpine
+        workingDir: /app
+        command: ["/bin/sh"]
+        args: ["-c", "echo 'package main\nimport (\n\"encoding/json\"\n\"fmt\"\n\"log\"\n\"net/http\"\n\"os\"\n\"time\"\n)\ntype ContactRequest struct {\nName string `json:\"name\"`\nEmail string `json:\"email\"`\nSubject string `json:\"subject\"`\nMessage string `json:\"message\"`\n}\nfunc healthHandler(w http.ResponseWriter, r *http.Request) {\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.Header().Set(\"Access-Control-Allow-Origin\", \"*\")\ncluster := os.Getenv(\"CLUSTER_NAME\")\nif cluster == \"\" {\ncluster = \"AWS-EKS\"\n}\nresponse := map[string]interface{}{\n\"status\": \"healthy\",\n\"message\": \"AddToCloud API is running\",\n\"cluster\": cluster,\n\"timestamp\": time.Now().Format(time.RFC3339),\n\"version\": \"1.0.0\",\n}\njson.NewEncoder(w).Encode(response)\n}\nfunc contactHandler(w http.ResponseWriter, r *http.Request) {\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.Header().Set(\"Access-Control-Allow-Origin\", \"*\")\nw.Header().Set(\"Access-Control-Allow-Methods\", \"POST, OPTIONS\")\nw.Header().Set(\"Access-Control-Allow-Headers\", \"Content-Type\")\nif r.Method == \"OPTIONS\" {\nw.WriteHeader(http.StatusOK)\nreturn\n}\nif r.Method != \"POST\" {\nw.WriteHeader(http.StatusMethodNotAllowed)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Method not allowed\"})\nreturn\n}\nvar req ContactRequest\nif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\nw.WriteHeader(http.StatusBadRequest)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Invalid request\"})\nreturn\n}\nif req.Name == \"\" || req.Email == \"\" || req.Message == \"\" {\nw.WriteHeader(http.StatusBadRequest)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Missing required fields\"})\nreturn\n}\nlog.Printf(\"Contact request received: Name=%s, Email=%s, Subject=%s\", req.Name, req.Email, req.Subject)\nresponse := map[string]interface{}{\n\"status\": \"received\",\n\"message\": \"Your message has been received successfully\",\n\"timestamp\": time.Now().Format(time.RFC3339),\n}\njson.NewEncoder(w).Encode(response)\n}\nfunc loginHandler(w http.ResponseWriter, r *http.Request) {\nw.Header().Set(\"Content-Type\", \"application/json\")\nw.Header().Set(\"Access-Control-Allow-Origin\", \"*\")\nw.Header().Set(\"Access-Control-Allow-Methods\", \"POST, OPTIONS\")\nw.Header().Set(\"Access-Control-Allow-Headers\", \"Content-Type\")\nif r.Method == \"OPTIONS\" {\nw.WriteHeader(http.StatusOK)\nreturn\n}\nif r.Method != \"POST\" {\nw.WriteHeader(http.StatusMethodNotAllowed)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Method not allowed\"})\nreturn\n}\nvar req map[string]string\nif err := json.NewDecoder(r.Body).Decode(&req); err != nil {\nw.WriteHeader(http.StatusBadRequest)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Invalid request\"})\nreturn\n}\nemail := req[\"email\"]\npassword := req[\"password\"]\nif email == \"\" || password == \"\" {\nw.WriteHeader(http.StatusBadRequest)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Email and password are required\"})\nreturn\n}\nlog.Printf(\"Login attempt for email: %s\", email)\nif email == \"admin@addtocloud.tech\" && password == \"admin123\" {\nresponse := map[string]interface{}{\n\"status\": \"success\",\n\"message\": \"Login successful\",\n\"token\": \"demo-jwt-token-123\",\n\"user\": map[string]string{\n\"email\": email,\n\"name\": \"Admin User\",\n\"role\": \"admin\",\n},\n\"timestamp\": time.Now().Format(time.RFC3339),\n}\njson.NewEncoder(w).Encode(response)\n} else {\nw.WriteHeader(http.StatusUnauthorized)\njson.NewEncoder(w).Encode(map[string]string{\"error\": \"Invalid credentials\"})\n}\n}\nfunc main() {\nhttp.HandleFunc(\"/api/health\", healthHandler)\nhttp.HandleFunc(\"/api/v1/contact\", contactHandler)\nhttp.HandleFunc(\"/api/v1/auth/login\", loginHandler)\nport := os.Getenv(\"PORT\")\nif port == \"\" {\nport = \"8080\"\n}\nlog.Printf(\"Starting AddToCloud API on port %s\", port)\nlog.Printf(\"Cluster: %s\", os.Getenv(\"CLUSTER_NAME\"))\nlog.Printf(\"Health endpoint: /api/health\")\nlog.Printf(\"Contact endpoint: /api/v1/contact\")\nlog.Printf(\"Login endpoint: /api/v1/auth/login\")\nlog.Fatal(http.ListenAndServe(\":\"+port, nil))\n}' > main.go && go mod init addtocloud-api && go run main.go"]
+        ports:
+        - containerPort: 8080
+        env:
+        - name: CLUSTER_NAME
+          value: "AWS-EKS"
+        - name: PORT
+          value: "8080"
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "32Mi"
+            cpu: "20m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-api
+  namespace: default
+spec:
+  selector:
+    app: addtocloud-api
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP

@@ -1,0 +1,38 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: addtocloud-routes
+  namespace: default
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - addtocloud-gateway
+  - addtocloud-gateway-https
+  http:
+  # Backend API routes (must come first for specificity)
+  - match:
+    - uri:
+        prefix: /api/v1/contact
+    route:
+    - destination:
+        host: addtocloud-simple-api
+        port:
+          number: 8080
+  - match:
+    - uri:
+        prefix: /api/
+    route:
+    - destination:
+        host: addtocloud-simple-api
+        port:
+          number: 8080
+  # Frontend routes (default catch-all)
+  - match:
+    - uri:
+        prefix: /
+    route:
+    - destination:
+        host: addtocloud-website
+        port:
+          number: 80

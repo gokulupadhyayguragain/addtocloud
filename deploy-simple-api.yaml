@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-api
+  namespace: addtocloud-prod
+  labels:
+    app: addtocloud-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: addtocloud-api
+  template:
+    metadata:
+      labels:
+        app: addtocloud-api
+    spec:
+      containers:
+      - name: api
+        image: httpd:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: api-content
+          mountPath: /usr/local/apache2/htdocs
+        - name: api-config
+          mountPath: /usr/local/apache2/conf/extra
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "25m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
+      volumes:
+      - name: api-content
+        configMap:
+          name: api-content
+      - name: api-config
+        configMap:
+          name: api-httpd-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-content
+  namespace: addtocloud-prod
+data:
+  health.json: |
+    {
+      "status": "healthy",
+      "message": "AddToCloud API Working",
+      "frontend_connected": true,
+      "database": "ready",
+      "timestamp": "2025-08-30T11:30:00Z"
+    }
+  contact.json: |
+    {
+      "success": true,
+      "message": "Contact request received successfully",
+      "request_id": "contact_12345",
+      "timestamp": "2025-08-30T11:30:00Z"
+    }
+  access-request.json: |
+    {
+      "success": true,
+      "message": "Access request submitted successfully",
+      "status": "pending_review",
+      "request_id": "access_67890",
+      "timestamp": "2025-08-30T11:30:00Z"
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-httpd-config
+  namespace: addtocloud-prod
+data:
+  api.conf: |
+    LoadModule rewrite_module modules/mod_rewrite.so
+    LoadModule headers_module modules/mod_headers.so
+    
+    <VirtualHost *:80>
+        DocumentRoot /usr/local/apache2/htdocs
+        
+        Header always set Access-Control-Allow-Origin "*"
+        Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS, PUT, DELETE"
+        Header always set Access-Control-Allow-Headers "Accept, Authorization, Cache-Control, Content-Type, DNT, If-Modified-Since, Keep-Alive, Origin, User-Agent, X-Requested-With"
+        
+        RewriteEngine On
+        
+        # Handle preflight requests
+        RewriteCond %{REQUEST_METHOD} OPTIONS
+        RewriteRule ^(.*)$ - [R=204,L]
+        
+        # API endpoints
+        RewriteRule ^/api/health$ /health.json [L]
+        RewriteRule ^/api/v1/contact$ /contact.json [L]
+        RewriteRule ^/api/v1/access-request$ /access-request.json [L]
+        
+        # Default
+        RewriteRule ^/$ /health.json [L]
+    </VirtualHost>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-api-service
+  namespace: addtocloud-prod
+spec:
+  selector:
+    app: addtocloud-api
+  ports:
+  - port: 80
+    targetPort: 80
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-api-lb
+  namespace: addtocloud-prod
+spec:
+  selector:
+    app: addtocloud-api
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+  type: LoadBalancer

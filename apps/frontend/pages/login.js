@@ -17,7 +17,12 @@ export default function Login() {
     setError('');
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://addtocloud-api-proxy.gocools.workers.dev';
+      const apiUrl = `${apiBaseUrl}/api/v1/auth/login`;
+      console.log('Login API URL:', apiUrl);
+      console.log('Login data:', { email: formData.email, password: '***' });
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -28,7 +33,10 @@ export default function Login() {
         }),
       });
 
+      console.log('Login response status:', response.status);
+      
       const data = await response.json();
+      console.log('Login response data:', data);
 
       if (response.ok) {
         // Store JWT token
@@ -41,7 +49,8 @@ export default function Login() {
         setError(data.message || 'Authentication failed');
       }
     } catch (err) {
-      setError('Network error. Please try again.');
+      console.error('Login error details:', err);
+      setError(`Network error. Please try again. Error: ${err.message}`);
     } finally {
       setLoading(false);
     }

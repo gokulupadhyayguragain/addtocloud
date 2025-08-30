@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-backend
+  namespace: addtocloud-prod
+  labels:
+    app: addtocloud-backend
+spec:
+  selector:
+    app: addtocloud-backend  # Match the pod labels
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP

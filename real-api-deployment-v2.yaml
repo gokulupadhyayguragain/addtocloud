@@ -1,0 +1,165 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: addtocloud-email-config
+  namespace: default
+type: Opaque
+stringData:
+  SMTP_HOST: "smtp.zoho.com"
+  SMTP_PORT: "587"
+  SMTP_USERNAME: "noreply@addtocloud.tech"
+  SMTP_PASSWORD: "your_zoho_app_password_here"  # Replace with actual app password
+  SMTP_FROM: "noreply@addtocloud.tech"
+  ADMIN_EMAIL: "admin@addtocloud.tech"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: addtocloud-api-config
+  namespace: default
+data:
+  DB_HOST: "postgres-service"
+  DB_PORT: "5432"
+  DB_NAME: "addtocloud"
+  DB_USER: "addtocloud"
+  JWT_SECRET: "your-jwt-secret-key-change-this"
+  CLUSTER_NAME: "AWS-EKS"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: addtocloud-db-secret
+  namespace: default
+type: Opaque
+stringData:
+  DB_PASSWORD: "addtocloud-password-123"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-real-api
+  namespace: default
+  annotations:
+    sidecar.istio.io/inject: "false"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: addtocloud-real-api
+  template:
+    metadata:
+      labels:
+        app: addtocloud-real-api
+      annotations:
+        sidecar.istio.io/inject: "false"
+    spec:
+      containers:
+      - name: api
+        image: golang:1.22-alpine
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          apk add --no-cache git
+          cat > /app/main.go << 'EOF'
+          $(cat ../real-api/main.go)
+          EOF
+          cd /app
+          go mod init addtocloud-api
+          go get github.com/lib/pq
+          go get github.com/golang-jwt/jwt/v4
+          go get golang.org/x/crypto/bcrypt
+          go build -o addtocloud-api main.go
+          ./addtocloud-api
+        ports:
+        - containerPort: 8080
+        env:
+        - name: CLUSTER_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-api-config
+              key: CLUSTER_NAME
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-api-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-api-config
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-api-config
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-api-config
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-db-secret
+              key: DB_PASSWORD
+        - name: JWT_SECRET
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-api-config
+              key: JWT_SECRET
+        - name: SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: SMTP_HOST
+        - name: SMTP_PORT
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: SMTP_PORT
+        - name: SMTP_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: SMTP_USERNAME
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: SMTP_PASSWORD
+        - name: SMTP_FROM
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: SMTP_FROM
+        - name: ADMIN_EMAIL
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-email-config
+              key: ADMIN_EMAIL
+        - name: PORT
+          value: "8080"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        workingDir: /app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-real-api-service
+  namespace: default
+spec:
+  selector:
+    app: addtocloud-real-api
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: LoadBalancer

@@ -1,0 +1,288 @@
+---
+# Enterprise Admin Dashboard
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-admin
+  namespace: addtocloud-prod
+  labels:
+    app: addtocloud-admin
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: addtocloud-admin
+  template:
+    metadata:
+      labels:
+        app: addtocloud-admin
+        version: v1
+    spec:
+      containers:
+      - name: admin-dashboard
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: admin-config
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+        - name: admin-content
+          mountPath: /usr/share/nginx/html/
+      volumes:
+      - name: admin-config
+        configMap:
+          name: admin-nginx-config
+      - name: admin-content
+        configMap:
+          name: admin-dashboard-content
+---
+# Admin Dashboard Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-admin
+  namespace: addtocloud-prod
+  labels:
+    app: addtocloud-admin
+spec:
+  selector:
+    app: addtocloud-admin
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+  type: ClusterIP
+---
+# Admin Dashboard Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: admin-nginx-config
+  namespace: addtocloud-prod
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+        
+        # Security headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';" always;
+        
+        location / {
+            try_files $uri $uri/ /index.html;
+        }
+        
+        location /api/admin/ {
+            proxy_pass http://addtocloud-backend:8080/api/admin/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        
+        # Health check
+        location /health {
+            access_log off;
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+    }
+---
+# Enterprise Admin Dashboard Content
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: admin-dashboard-content
+  namespace: addtocloud-prod
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>AddToCloud Enterprise Admin Dashboard</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    </head>
+    <body class="bg-gray-100">
+        <div class="min-h-screen flex">
+            <!-- Sidebar -->
+            <div class="w-64 bg-gray-800 text-white p-6">
+                <div class="mb-8">
+                    <h1 class="text-2xl font-bold">AddToCloud</h1>
+                    <p class="text-gray-400">Enterprise Admin</p>
+                </div>
+                <nav class="space-y-4">
+                    <a href="#dashboard" class="block p-3 rounded bg-blue-600"><i class="fas fa-chart-line mr-2"></i>Dashboard</a>
+                    <a href="#services" class="block p-3 rounded hover:bg-gray-700"><i class="fas fa-cloud mr-2"></i>Cloud Services</a>
+                    <a href="#users" class="block p-3 rounded hover:bg-gray-700"><i class="fas fa-users mr-2"></i>User Management</a>
+                    <a href="#monitoring" class="block p-3 rounded hover:bg-gray-700"><i class="fas fa-chart-bar mr-2"></i>Monitoring</a>
+                    <a href="#settings" class="block p-3 rounded hover:bg-gray-700"><i class="fas fa-cog mr-2"></i>Settings</a>
+                </nav>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="flex-1 p-8">
+                <div class="mb-8">
+                    <h2 class="text-3xl font-bold text-gray-800">Enterprise Dashboard</h2>
+                    <p class="text-gray-600">Monitor and manage your cloud infrastructure</p>
+                </div>
+                
+                <!-- Stats Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-500 text-sm">Active Services</p>
+                                <p class="text-3xl font-bold text-green-600" id="active-services">12</p>
+                            </div>
+                            <i class="fas fa-server text-3xl text-green-600"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-500 text-sm">Total Users</p>
+                                <p class="text-3xl font-bold text-blue-600" id="total-users">1,247</p>
+                            </div>
+                            <i class="fas fa-users text-3xl text-blue-600"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-500 text-sm">System Health</p>
+                                <p class="text-3xl font-bold text-green-600">99.9%</p>
+                            </div>
+                            <i class="fas fa-heartbeat text-3xl text-green-600"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-500 text-sm">Revenue</p>
+                                <p class="text-3xl font-bold text-purple-600">$125K</p>
+                            </div>
+                            <i class="fas fa-dollar-sign text-3xl text-purple-600"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Charts and Data -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-xl font-bold mb-4">Service Usage</h3>
+                        <canvas id="usageChart" width="400" height="200"></canvas>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <h3 class="text-xl font-bold mb-4">System Performance</h3>
+                        <canvas id="performanceChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Service Status Table -->
+                <div class="bg-white rounded-lg shadow">
+                    <div class="p-6">
+                        <h3 class="text-xl font-bold mb-4">Service Status</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full table-auto">
+                                <thead>
+                                    <tr class="bg-gray-50">
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Service</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Uptime</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Last Check</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="service-table" class="divide-y divide-gray-200">
+                                    <!-- Dynamic content will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <script>
+            // Initialize charts
+            const usageCtx = document.getElementById('usageChart').getContext('2d');
+            new Chart(usageCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['AWS', 'Azure', 'GCP', 'Other'],
+                    datasets: [{
+                        data: [40, 30, 25, 5],
+                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+            
+            const performanceCtx = document.getElementById('performanceChart').getContext('2d');
+            new Chart(performanceCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    datasets: [{
+                        label: 'Response Time (ms)',
+                        data: [45, 38, 42, 35, 40, 33],
+                        borderColor: '#36A2EB',
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+            
+            // Load service status
+            function loadServiceStatus() {
+                const services = [
+                    {name: 'Frontend', status: 'Healthy', uptime: '99.9%', lastCheck: '2 min ago'},
+                    {name: 'Backend API', status: 'Healthy', uptime: '99.8%', lastCheck: '1 min ago'},
+                    {name: 'Database', status: 'Healthy', uptime: '99.9%', lastCheck: '30 sec ago'},
+                    {name: 'Istio Gateway', status: 'Healthy', uptime: '100%', lastCheck: '1 min ago'},
+                    {name: 'Prometheus', status: 'Healthy', uptime: '99.7%', lastCheck: '2 min ago'},
+                    {name: 'Grafana', status: 'Healthy', uptime: '99.9%', lastCheck: '1 min ago'}
+                ];
+                
+                const tbody = document.getElementById('service-table');
+                tbody.innerHTML = services.map(service => `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${service.name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                ${service.status}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${service.uptime}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${service.lastCheck}</td>
+                    </tr>
+                `).join('');
+            }
+            
+            // Load data on page load
+            document.addEventListener('DOMContentLoaded', function() {
+                loadServiceStatus();
+            });
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadServiceStatus, 30000);
+        </script>
+    </body>
+    </html>
