@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 
-const API_BASE_URL = 'http://ac45781f9ec244ecc990af39bc64599a-1018645703.us-west-2.elb.amazonaws.com';
+const API_BASE_URL = 'http://a646114b86e1c4d03a014b1a8fa217d0-832697644.us-west-2.elb.amazonaws.com';
 
 export default function Home() {
   const [apiStatus, setApiStatus] = useState('checking');

@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: addtocloud-go-api
+  name: addtocloud-360-api
   labels:
-    app: addtocloud-go-api
-    version: v1.0
+    app: addtocloud-360-api
+    version: v2.0
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: addtocloud-go-api
+      app: addtocloud-360-api
   template:
     metadata:
       labels:
-        app: addtocloud-go-api
+        app: addtocloud-360-api
     spec:
       containers:
       - name: go-api
@@ -23,8 +23,6 @@ spec:
         env:
         - name: PORT
           value: "8080"
-        - name: GIN_MODE
-          value: release
         command: ["/bin/sh"]
         args:
         - -c
@@ -46,6 +44,7 @@ spec:
             Message           string `json:"message"`
             FrontendConnected bool   `json:"frontend_connected"`
             Database          string `json:"database"`
+            Services          int    `json:"services_count"`
             Timestamp         string `json:"timestamp"`
           }
 
@@ -78,6 +77,30 @@ spec:
             Timestamp string `json:"timestamp"`
           }
 
+          type DeployRequest struct {
+            Service struct {
+              Name        string `json:"name"`
+              Provider    string `json:"provider"`
+              Category    string `json:"category"`
+              Description string `json:"description"`
+            } `json:"service"`
+            Config struct {
+              Name         string `json:"name"`
+              Region       string `json:"region"`
+              InstanceType string `json:"instanceType"`
+              Environment  string `json:"environment"`
+            } `json:"config"`
+          }
+
+          type DeployResponse struct {
+            Success      bool   `json:"success"`
+            Message      string `json:"message"`
+            DeploymentID string `json:"deploymentId"`
+            Status       string `json:"status"`
+            EstimatedTime string `json:"estimatedTime"`
+            Timestamp    string `json:"timestamp"`
+          }
+
           func enableCORS(w http.ResponseWriter) {
             w.Header().Set("Access-Control-Allow-Origin", "*")
             w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
@@ -94,9 +117,10 @@ spec:
 
             response := HealthResponse{
               Status:            "healthy",
-              Message:           "AddToCloud Go API Working",
+              Message:           "AddToCloud 360+ Services API Ready",
               FrontendConnected: true,
               Database:          "ready",
+              Services:          360,
               Timestamp:         time.Now().UTC().Format(time.RFC3339),
             }
 
@@ -169,6 +193,43 @@ spec:
             json.NewEncoder(w).Encode(response)
           }
 
+          func deployHandler(w http.ResponseWriter, r *http.Request) {
+            enableCORS(w)
+
+            if r.Method == "OPTIONS" {
+              w.WriteHeader(http.StatusOK)
+              return
+            }
+
+            if r.Method != "POST" {
+              w.WriteHeader(http.StatusMethodNotAllowed)
+              json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
+              return
+            }
+
+            var deploy DeployRequest
+            if err := json.NewDecoder(r.Body).Decode(&deploy); err != nil {
+              w.WriteHeader(http.StatusBadRequest)
+              json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON"})
+              return
+            }
+
+            // Simulate deployment processing
+            deploymentID := fmt.Sprintf("deploy_%s_%d", deploy.Service.Provider, time.Now().Unix())
+            
+            response := DeployResponse{
+              Success:       true,
+              Message:       fmt.Sprintf("%s %s deployment initiated successfully", deploy.Service.Provider, deploy.Service.Name),
+              DeploymentID:  deploymentID,
+              Status:        "provisioning",
+              EstimatedTime: "3-5 minutes",
+              Timestamp:     time.Now().UTC().Format(time.RFC3339),
+            }
+
+            w.Header().Set("Content-Type", "application/json")
+            json.NewEncoder(w).Encode(response)
+          }
+
           func rootHandler(w http.ResponseWriter, r *http.Request) {
             enableCORS(w)
 
@@ -179,8 +240,10 @@ spec:
 
             response := map[string]interface{}{
               "status":    "operational",
-              "message":   "AddToCloud Go API Ready",
-              "endpoints": []string{"/api/health", "/api/v1/contact", "/api/v1/access-request"},
+              "message":   "AddToCloud 360+ Services API",
+              "endpoints": []string{"/api/health", "/api/v1/contact", "/api/v1/access-request", "/api/v1/deploy"},
+              "services":  360,
+              "providers": []string{"AWS", "Azure", "GCP", "CloudFlare", "DigitalOcean", "Linode", "Vultr"},
               "timestamp": time.Now().UTC().Format(time.RFC3339),
             }
 
@@ -196,12 +259,13 @@ spec:
             http.HandleFunc("/api/v1/deploy", deployHandler)
 
             port := ":8080"
-            log.Printf("🚀 AddToCloud API starting on port %s", port)
+            log.Printf("🚀 AddToCloud 360+ Services API starting on port %s", port)
             log.Printf("🌐 API endpoints ready:")
             log.Printf("   GET  /api/health")
             log.Printf("   POST /api/v1/contact")
             log.Printf("   POST /api/v1/access-request")
             log.Printf("   POST /api/v1/deploy")
+            log.Printf("📊 360+ Cloud Services Available")
 
             if err := http.ListenAndServe(port, nil); err != nil {
               log.Fatal("❌ Failed to start server:", err)
@@ -209,16 +273,16 @@ spec:
           }
           EOF
           
-          go mod init addtocloud-api
+          go mod init addtocloud-360-api
           go run main.go
         workingDir: /app
         resources:
           requests:
-            memory: "128Mi"
-            cpu: "100m"
+            memory: "256Mi"
+            cpu: "200m"
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "1Gi"
+            cpu: "1000m"
         livenessProbe:
           httpGet:
             path: /api/health
@@ -235,9 +299,9 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: addtocloud-go-api-service
+  name: addtocloud-360-api-service
   labels:
-    app: addtocloud-go-api
+    app: addtocloud-360-api
 spec:
   type: LoadBalancer
   ports:
@@ -246,4 +310,4 @@ spec:
     protocol: TCP
     name: http
   selector:
-    app: addtocloud-go-api
+    app: addtocloud-360-api

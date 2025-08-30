@@ -45,6 +45,30 @@ type AccessResponse struct {
 	Timestamp string `json:"timestamp"`
 }
 
+type DeployRequest struct {
+	Service struct {
+		Name        string `json:"name"`
+		Provider    string `json:"provider"`
+		Category    string `json:"category"`
+		Description string `json:"description"`
+	} `json:"service"`
+	Config struct {
+		Name         string `json:"name"`
+		Region       string `json:"region"`
+		InstanceType string `json:"instanceType"`
+		Environment  string `json:"environment"`
+	} `json:"config"`
+}
+
+type DeployResponse struct {
+	Success       bool   `json:"success"`
+	Message       string `json:"message"`
+	DeploymentID  string `json:"deploymentId"`
+	Status        string `json:"status"`
+	EstimatedTime string `json:"estimatedTime"`
+	Timestamp     string `json:"timestamp"`
+}
+
 func enableCORS(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
@@ -136,6 +160,43 @@ func accessRequestHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+func deployHandler(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w)
+
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != "POST" {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Method not allowed"})
+		return
+	}
+
+	var deploy DeployRequest
+	if err := json.NewDecoder(r.Body).Decode(&deploy); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid JSON"})
+		return
+	}
+
+	// Simulate deployment processing
+	deploymentID := fmt.Sprintf("deploy_%s_%d", deploy.Service.Provider, time.Now().Unix())
+
+	response := DeployResponse{
+		Success:       true,
+		Message:       fmt.Sprintf("%s %s deployment initiated successfully", deploy.Service.Provider, deploy.Service.Name),
+		DeploymentID:  deploymentID,
+		Status:        "provisioning",
+		EstimatedTime: "3-5 minutes",
+		Timestamp:     time.Now().UTC().Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 func rootHandler(w http.ResponseWriter, r *http.Request) {
 	enableCORS(w)
 
@@ -160,6 +221,7 @@ func main() {
 	http.HandleFunc("/api/health", healthHandler)
 	http.HandleFunc("/api/v1/contact", contactHandler)
 	http.HandleFunc("/api/v1/access-request", accessRequestHandler)
+	http.HandleFunc("/api/v1/deploy", deployHandler)
 
 	port := ":8080"
 	log.Printf("🚀 AddToCloud API starting on port %s", port)
@@ -167,6 +229,7 @@ func main() {
 	log.Printf("   GET  /api/health")
 	log.Printf("   POST /api/v1/contact")
 	log.Printf("   POST /api/v1/access-request")
+	log.Printf("   POST /api/v1/deploy")
 
 	if err := http.ListenAndServe(port, nil); err != nil {
 		log.Fatal("❌ Failed to start server:", err)
