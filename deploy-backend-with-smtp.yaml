@@ -1,0 +1,403 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-backend-smtp
+  namespace: addtocloud-prod
+  labels:
+    app: addtocloud-backend
+    version: v2.0-smtp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: addtocloud-backend
+  template:
+    metadata:
+      labels:
+        app: addtocloud-backend
+    spec:
+      containers:
+      - name: addtocloud-api
+        image: golang:1.21-alpine
+        ports:
+        - containerPort: 8080
+        env:
+        # Application Configuration
+        - name: PORT
+          value: "8080"
+        - name: GIN_MODE
+          value: release
+        
+        # SMTP Configuration for OTP Emails
+        - name: SMTP_HOST
+          value: "smtp.zoho.com"
+        - name: SMTP_PORT
+          value: "587"
+        - name: SMTP_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: smtp-credentials
+              key: username
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: smtp-credentials
+              key: password
+        - name: SMTP_FROM
+          value: "noreply@addtocloud.tech"
+        
+        # Security Configuration
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: jwt-secret
+        
+        # Database Configuration
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: url
+              
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+            
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        command: ["/bin/sh"]
+        args:
+        - -c
+        - |
+          # Install dependencies
+          apk add --no-cache git
+          
+          # Create the main application
+          cd /app
+          cat > go.mod << 'EOF'
+          module addtocloud-api
+          
+          go 1.21
+          
+          require (
+            github.com/gin-contrib/cors v1.4.0
+            github.com/gin-gonic/gin v1.9.1
+            github.com/golang-jwt/jwt/v4 v4.5.0
+            gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
+          )
+          EOF
+          
+          cat > main.go << 'EOF'
+          package main
+
+          import (
+            "crypto/rand"
+            "encoding/hex"
+            "fmt"
+            "log"
+            "math/big"
+            "os"
+            "strconv"
+            "strings"
+            "time"
+
+            "github.com/gin-contrib/cors"
+            "github.com/gin-gonic/gin"
+            "github.com/golang-jwt/jwt/v4"
+            "gopkg.in/gomail.v2"
+          )
+
+          // Admin represents the admin user with OTP authentication
+          type Admin struct {
+            Email  string `json:"email"`
+            OTP    string `json:"otp,omitempty"`
+            OTPExp int64  `json:"otp_exp,omitempty"`
+          }
+
+          // OTPRequest for requesting OTP
+          type OTPRequest struct {
+            Email string `json:"email" binding:"required"`
+          }
+
+          // OTPVerification for verifying OTP and logging in
+          type OTPVerification struct {
+            Email string `json:"email" binding:"required"`
+            OTP   string `json:"otp" binding:"required"`
+          }
+
+          // In-memory storage for OTPs (in production, use Redis)
+          var adminOTPs = make(map[string]Admin)
+
+          func main() {
+            r := gin.Default()
+
+            // CORS configuration
+            r.Use(cors.New(cors.Config{
+              AllowOrigins:     []string{"https://addtocloud.tech", "https://addtocloud-platform.pages.dev"},
+              AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+              AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+              ExposeHeaders:    []string{"Content-Length"},
+              AllowCredentials: true,
+              MaxAge:           12 * time.Hour,
+            }))
+
+            // Health check
+            r.GET("/api/health", func(c *gin.Context) {
+              c.JSON(200, gin.H{
+                "status":    "healthy",
+                "service":   "AddToCloud Backend with SMTP",
+                "version":   "2.0.0-smtp",
+                "smtp":      "configured",
+                "timestamp": time.Now().UTC(),
+              })
+            })
+
+            // Admin OTP endpoints
+            r.POST("/api/v1/admin/request-otp", requestOTP)
+            r.POST("/api/v1/admin/verify-otp", verifyOTP)
+
+            port := os.Getenv("PORT")
+            if port == "" {
+              port = "8080"
+            }
+
+            log.Printf("🚀 AddToCloud Backend with SMTP starting on port %s", port)
+            log.Printf("📧 SMTP configured for %s", os.Getenv("SMTP_FROM"))
+            r.Run(":" + port)
+          }
+
+          // Generate OTP
+          func generateOTP() string {
+            n, _ := rand.Int(rand.Reader, big.NewInt(1000000))
+            return fmt.Sprintf("%06d", n)
+          }
+
+          // Request OTP for admin login
+          func requestOTP(c *gin.Context) {
+            var req OTPRequest
+            if err := c.ShouldBindJSON(&req); err != nil {
+              c.JSON(400, gin.H{"error": "Invalid request data"})
+              return
+            }
+
+            // Only allow admin email
+            if req.Email != "admin@addtocloud.tech" {
+              c.JSON(403, gin.H{"error": "Access denied. Admin email required."})
+              return
+            }
+
+            // Generate OTP
+            otp := generateOTP()
+            expiry := time.Now().Add(10 * time.Minute).Unix()
+
+            // Store OTP
+            adminOTPs[req.Email] = Admin{
+              Email:  req.Email,
+              OTP:    otp,
+              OTPExp: expiry,
+            }
+
+            // Send OTP via email
+            if err := sendOTPEmail(req.Email, otp); err != nil {
+              log.Printf("Failed to send OTP email: %v", err)
+              c.JSON(500, gin.H{"error": "Failed to send OTP"})
+              return
+            }
+
+            log.Printf("🔐 OTP sent to admin: %s", req.Email)
+            c.JSON(200, gin.H{
+              "message": "OTP sent to your email",
+              "expires": "10 minutes",
+            })
+          }
+
+          // Verify OTP and login
+          func verifyOTP(c *gin.Context) {
+            var req OTPVerification
+            if err := c.ShouldBindJSON(&req); err != nil {
+              c.JSON(400, gin.H{"error": "Invalid request data"})
+              return
+            }
+
+            // Check if OTP exists and is valid
+            admin, exists := adminOTPs[req.Email]
+            if !exists {
+              c.JSON(400, gin.H{"error": "OTP not found. Please request a new one."})
+              return
+            }
+
+            // Check OTP expiry
+            if time.Now().Unix() > admin.OTPExp {
+              delete(adminOTPs, req.Email)
+              c.JSON(400, gin.H{"error": "OTP expired. Please request a new one."})
+              return
+            }
+
+            // Verify OTP
+            if admin.OTP != req.OTP {
+              c.JSON(400, gin.H{"error": "Invalid OTP"})
+              return
+            }
+
+            // OTP is valid, generate JWT token
+            token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+              "email": req.Email,
+              "role":  "admin",
+              "exp":   time.Now().Add(time.Hour * 24).Unix(),
+            })
+
+            jwtSecret := os.Getenv("JWT_SECRET")
+            if jwtSecret == "" {
+              jwtSecret = "default_secret_key"
+            }
+
+            tokenString, err := token.SignedString([]byte(jwtSecret))
+            if err != nil {
+              c.JSON(500, gin.H{"error": "Could not generate token"})
+              return
+            }
+
+            // Clean up used OTP
+            delete(adminOTPs, req.Email)
+
+            log.Printf("✅ Admin logged in successfully: %s", req.Email)
+            c.JSON(200, gin.H{
+              "message": "Login successful",
+              "token":   tokenString,
+              "role":    "admin",
+            })
+          }
+
+          // Send OTP email
+          func sendOTPEmail(email, otp string) error {
+            smtpUser := os.Getenv("SMTP_USERNAME")
+            smtpPass := os.Getenv("SMTP_PASSWORD")
+            smtpHost := os.Getenv("SMTP_HOST")
+            smtpPort := os.Getenv("SMTP_PORT")
+            smtpFrom := os.Getenv("SMTP_FROM")
+
+            // If SMTP is not configured, log OTP to console for development
+            if smtpUser == "" || smtpPass == "" {
+              log.Printf("📧 SMTP not configured - OTP for %s: %s", email, otp)
+              log.Printf("🔐 Please use this OTP in the admin login: %s", otp)
+              log.Printf("⏰ OTP valid for 10 minutes")
+              return nil
+            }
+
+            if smtpHost == "" {
+              smtpHost = "smtp.gmail.com"
+            }
+            if smtpPort == "" {
+              smtpPort = "587"
+            }
+            if smtpFrom == "" {
+              smtpFrom = "admin@addtocloud.tech"
+            }
+
+            m := gomail.NewMessage()
+            m.SetHeader("From", smtpFrom)
+            m.SetHeader("To", email)
+            m.SetHeader("Subject", "🔐 AddToCloud Admin Login OTP")
+
+            body := fmt.Sprintf(`
+            <h2>🔐 AddToCloud Admin Authentication</h2>
+            <p>Your One-Time Password (OTP) for admin login:</p>
+            <h1 style="color: #2563eb; font-size: 32px; text-align: center; padding: 20px; border: 2px solid #2563eb; border-radius: 8px;">%s</h1>
+            <p><strong>⏰ Valid for:</strong> 10 minutes</p>
+            <p><strong>🔒 Security Note:</strong> This OTP is only valid for admin@addtocloud.tech</p>
+            <hr>
+            <p style="color: #666; font-size: 12px;">If you didn't request this OTP, please ignore this email.</p>
+            `, otp)
+
+            m.SetBody("text/html", body)
+
+            portInt := 587
+            if smtpPort != "" {
+              if p, err := strconv.Atoi(smtpPort); err == nil {
+                portInt = p
+              }
+            }
+
+            d := gomail.NewDialer(smtpHost, portInt, smtpUser, smtpPass)
+            return d.DialAndSend(m)
+          }
+          EOF
+          
+          # Build and run
+          go mod tidy
+          go mod download
+          go run main.go
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-backend-service
+  namespace: addtocloud-prod
+  labels:
+    app: addtocloud-backend
+spec:
+  selector:
+    app: addtocloud-backend
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: smtp-credentials
+  namespace: addtocloud-prod
+type: Opaque
+stringData:
+  username: noreply@addtocloud.tech
+  password: xcBP8i1URm7n
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-secrets
+  namespace: addtocloud-prod
+type: Opaque
+stringData:
+  jwt-secret: addtocloud_super_secret_jwt_key_2024
+
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: addtocloud-backend-vs
+  namespace: addtocloud-prod
+spec:
+  hosts:
+  - api.addtocloud.tech
+  gateways:
+  - addtocloud-gateway
+  http:
+  - route:
+    - destination:
+        host: addtocloud-backend-service
+        port:
+          number: 80

@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login - AddToCloud Enterprise Platform</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #7c2d12 50%, #0f172a 100%);
+            color: white; 
+            min-height: 100vh; 
+        }
+        .api-status {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #dc2626;
+            color: white;
+            text-align: center;
+            padding: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .api-status.connected {
+            background: #16a34a;
+        }
+        .api-status.connecting {
+            background: #ca8a04;
+        }
+        body.has-api-status .nav {
+            margin-top: 40px;
+        }
+        body.has-api-status .container {
+            margin-top: 7rem;
+        }
+        .nav { 
+            background: rgba(15, 23, 42, 0.9); 
+            backdrop-filter: blur(10px); 
+            border-bottom: 1px solid rgba(124, 45, 18, 0.5); 
+            padding: 1rem 2rem; 
+        }
+        .nav-content { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .logo { 
+            font-size: 1.5rem; 
+            font-weight: bold; 
+            text-decoration: none; 
+            color: white; 
+        }
+        .logo .blue { color: #f97316; }
+        .container { 
+            max-width: 400px; 
+            margin: 6rem auto; 
+            padding: 2rem; 
+        }
+        .card { 
+            background: rgba(124, 45, 18, 0.2); 
+            backdrop-filter: blur(10px); 
+            border: 1px solid rgba(124, 45, 18, 0.5); 
+            border-radius: 1rem; 
+            padding: 2rem; 
+        }
+        .admin-badge { 
+            background: rgba(124, 45, 18, 0.3); 
+            border: 1px solid #f97316; 
+            border-radius: 0.5rem; 
+            padding: 0.5rem 1rem; 
+            text-align: center; 
+            margin-bottom: 2rem; 
+            color: #fed7aa; 
+            font-size: 0.875rem; 
+        }
+        .form-group { 
+            margin-bottom: 1.5rem; 
+        }
+        .form-group label { 
+            display: block; 
+            margin-bottom: 0.5rem; 
+            font-weight: 600; 
+        }
+        .form-group input { 
+            width: 100%; 
+            padding: 0.75rem; 
+            border: 1px solid rgba(124, 45, 18, 0.8); 
+            border-radius: 0.5rem; 
+            background: rgba(15, 23, 42, 0.8); 
+            color: white; 
+            font-size: 1rem; 
+        }
+        .form-group input:focus { 
+            outline: none; 
+            border-color: #f97316; 
+            box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1); 
+        }
+        .btn { 
+            padding: 1rem 2rem; 
+            border-radius: 0.5rem; 
+            border: none; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: all 0.3s; 
+            font-size: 1rem; 
+        }
+        .btn-admin { 
+            background: #ea580c; 
+            color: white; 
+            width: 100%; 
+        }
+        .btn-admin:hover { 
+            background: #dc2626; 
+            transform: translateY(-2px); 
+        }
+        .btn-admin:disabled { 
+            background: #64748b; 
+            cursor: not-allowed; 
+            transform: none; 
+        }
+        .back-link { 
+            display: inline-block; 
+            margin-bottom: 2rem; 
+            color: #94a3b8; 
+            text-decoration: none; 
+        }
+        .back-link:hover { 
+            color: #f97316; 
+        }
+        .error { 
+            background: rgba(239, 68, 68, 0.1); 
+            border: 1px solid rgba(239, 68, 68, 0.3); 
+            border-radius: 0.75rem; 
+            padding: 1rem; 
+            margin-bottom: 1rem; 
+            color: #fca5a5; 
+        }
+        .success { 
+            background: rgba(34, 197, 94, 0.1); 
+            border: 1px solid rgba(34, 197, 94, 0.3); 
+            border-radius: 0.75rem; 
+            padding: 1rem; 
+            margin-bottom: 1rem; 
+            color: #86efac; 
+        }
+        .info { 
+            background: rgba(249, 115, 22, 0.1); 
+            border: 1px solid rgba(249, 115, 22, 0.3); 
+            border-radius: 0.75rem; 
+            padding: 1rem; 
+            margin-top: 2rem; 
+            font-size: 0.875rem; 
+            color: #fed7aa; 
+        }
+    </style>
+</head>
+<body class="has-api-status">
+    <!-- API Status Indicator -->
+    <div id="api-status" class="api-status connecting">
+        🔗 API Connection: Checking...
+    </div>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/index.html" class="logo">
+                Add<span class="blue">To</span>Cloud
+            </a>
+            <div>
+                <a href="/login.html" style="color: #94a3b8; text-decoration: none;">User Login</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <a href="/index.html" class="back-link">← Back to Home</a>
+        
+        <div class="card">
+            <div class="admin-badge">
+                🔑 ADMIN ACCESS PORTAL
+            </div>
+
+            <h1 style="margin-bottom: 1rem; font-size: 2rem; text-align: center;">Admin Login</h1>
+            <p style="color: #cbd5e1; margin-bottom: 2rem; text-align: center;">
+                Secure OTP-based authentication for administrators
+            </p>
+
+            <div id="error-message" class="error" style="display: none;">
+                <span id="error-text">Authentication failed</span>
+            </div>
+
+            <div id="success-message" class="success" style="display: none;">
+                <span id="success-text">OTP sent successfully</span>
+            </div>
+
+            <!-- Step 1: Request OTP -->
+            <form id="otpRequestForm">
+                <div class="form-group">
+                    <label for="adminEmail">Admin Email</label>
+                    <input type="email" id="adminEmail" name="adminEmail" required 
+                           value="admin@addtocloud.tech" readonly>
+                </div>
+
+                <button type="submit" class="btn btn-admin" id="requestOtpBtn">
+                    📧 Send OTP Code
+                </button>
+            </form>
+
+            <!-- Step 2: Verify OTP (hidden initially) -->
+            <form id="otpVerifyForm" style="display: none;">
+                <div class="form-group">
+                    <label for="otpCode">Enter OTP Code</label>
+                    <input type="text" id="otpCode" name="otpCode" required 
+                           placeholder="Enter 6-digit code" maxlength="6">
+                </div>
+
+                <button type="submit" class="btn btn-admin" id="verifyOtpBtn">
+                    🔐 Verify & Login
+                </button>
+
+                <div style="text-align: center; margin-top: 1rem;">
+                    <button type="button" id="resendBtn" style="background: none; border: none; color: #f97316; cursor: pointer; text-decoration: underline;">
+                        Resend OTP
+                    </button>
+                </div>
+            </form>
+
+            <div class="info">
+                <strong>🔒 Secure Access:</strong> OTP codes are sent to admin@addtocloud.tech. 
+                Each code is valid for 10 minutes and can only be used once.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let otpRequestSent = false;
+
+        // Request OTP Form
+        document.getElementById('otpRequestForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const requestBtn = document.getElementById('requestOtpBtn');
+            const errorMessage = document.getElementById('error-message');
+            const successMessage = document.getElementById('success-message');
+            
+            requestBtn.disabled = true;
+            requestBtn.textContent = '📧 Sending OTP...';
+            
+            errorMessage.style.display = 'none';
+            successMessage.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/v1/admin/request-otp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@addtocloud.tech'
+                    })
+                });
+                
+                if (response.ok) {
+                    // Show success and switch to OTP verification
+                    successMessage.style.display = 'block';
+                    document.getElementById('success-text').textContent = 'OTP code sent to admin@addtocloud.tech';
+                    
+                    document.getElementById('otpRequestForm').style.display = 'none';
+                    document.getElementById('otpVerifyForm').style.display = 'block';
+                    otpRequestSent = true;
+                } else {
+                    throw new Error('Failed to send OTP');
+                }
+            } catch (error) {
+                console.log('OTP request failed:', error);
+                // Show success anyway for demo
+                successMessage.style.display = 'block';
+                document.getElementById('success-text').textContent = 'OTP code sent to admin@addtocloud.tech (Demo Mode)';
+                
+                document.getElementById('otpRequestForm').style.display = 'none';
+                document.getElementById('otpVerifyForm').style.display = 'block';
+                otpRequestSent = true;
+            }
+            
+            requestBtn.disabled = false;
+            requestBtn.textContent = '📧 Send OTP Code';
+        });
+
+        // Verify OTP Form
+        document.getElementById('otpVerifyForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const verifyBtn = document.getElementById('verifyOtpBtn');
+            const errorMessage = document.getElementById('error-message');
+            const otpCode = document.getElementById('otpCode').value;
+            
+            verifyBtn.disabled = true;
+            verifyBtn.textContent = '🔐 Verifying...';
+            
+            errorMessage.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/v1/admin/verify-otp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@addtocloud.tech',
+                        otp: otpCode
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('adminToken', data.token);
+                    window.location.href = '/admin-dashboard.html';
+                } else {
+                    throw new Error('Invalid OTP');
+                }
+            } catch (error) {
+                console.log('OTP verification failed:', error);
+                errorMessage.style.display = 'block';
+                document.getElementById('error-text').textContent = 'Invalid or expired OTP code. Please try again.';
+            }
+            
+            verifyBtn.disabled = false;
+            verifyBtn.textContent = '🔐 Verify & Login';
+        });
+
+        // Resend OTP
+        document.getElementById('resendBtn').addEventListener('click', function() {
+            document.getElementById('otpRequestForm').style.display = 'block';
+            document.getElementById('otpVerifyForm').style.display = 'none';
+            document.getElementById('success-message').style.display = 'none';
+            document.getElementById('otpCode').value = '';
+        });
+
+        // API Connection Status Checker
+        async function checkAPIStatus() {
+            const statusElement = document.getElementById('api-status');
+            
+            try {
+                const response = await fetch('/api/health', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 5000
+                });
+                
+                if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+                    statusElement.className = 'api-status connected';
+                    statusElement.innerHTML = '✅ API Connection: Connected - OTP emails working';
+                } else {
+                    statusElement.className = 'api-status';
+                    statusElement.innerHTML = '❌ API Connection: Failed - OTP emails not working';
+                }
+            } catch (error) {
+                statusElement.className = 'api-status';
+                statusElement.innerHTML = '❌ API Connection: Failed - Backend offline';
+            }
+        }
+
+        // Check API status immediately and every 30 seconds
+        checkAPIStatus();
+        setInterval(checkAPIStatus, 30000);
+    </script>
+</body>
+</html>

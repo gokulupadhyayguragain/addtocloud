@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -644,8 +645,39 @@ func getVMStatus(c *gin.Context) {
 
 // Send OTP email
 func sendOTPEmail(email, otp string) error {
+	smtpUser := os.Getenv("SMTP_USERNAME")
+	smtpPass := os.Getenv("SMTP_PASSWORD")
+	smtpHost := os.Getenv("SMTP_HOST")
+	smtpPort := os.Getenv("SMTP_PORT")
+
+	// Fallback to old env var names if new ones aren't set
+	if smtpUser == "" {
+		smtpUser = os.Getenv("SMTP_USER")
+	}
+	if smtpPass == "" {
+		smtpPass = os.Getenv("SMTP_PASS")
+	}
+	if smtpHost == "" {
+		smtpHost = "smtp.gmail.com"
+	}
+	if smtpPort == "" {
+		smtpPort = "587"
+	}
+
+	// If SMTP is not configured, log OTP to console for development
+	if smtpUser == "" || smtpPass == "" {
+		log.Printf("📧 SMTP not configured - OTP for %s: %s", email, otp)
+		log.Printf("🔐 Please use this OTP in the admin login: %s", otp)
+		log.Printf("⏰ OTP valid for 10 minutes")
+		log.Printf("💡 To enable email sending, set SMTP_USERNAME and SMTP_PASSWORD environment variables")
+		return nil
+	}
+
 	m := gomail.NewMessage()
-	m.SetHeader("From", "admin@addtocloud.tech")
+	m.SetHeader("From", os.Getenv("SMTP_FROM"))
+	if os.Getenv("SMTP_FROM") == "" {
+		m.SetHeader("From", "admin@addtocloud.tech")
+	}
 	m.SetHeader("To", email)
 	m.SetHeader("Subject", "🔐 AddToCloud Admin Login OTP")
 
@@ -661,7 +693,14 @@ func sendOTPEmail(email, otp string) error {
 
 	m.SetBody("text/html", body)
 
-	d := gomail.NewDialer("smtp.gmail.com", 587, os.Getenv("SMTP_USER"), os.Getenv("SMTP_PASS"))
+	portInt := 587
+	if smtpPort != "" {
+		if p, err := strconv.Atoi(smtpPort); err == nil {
+			portInt = p
+		}
+	}
+
+	d := gomail.NewDialer(smtpHost, portInt, smtpUser, smtpPass)
 	return d.DialAndSend(m)
 }
 

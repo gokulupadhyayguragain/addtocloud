@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AddToCloud - Enterprise Cloud Platform | Authentication Required | Updated</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%);
+            color: white; 
+            min-height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        .api-status {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #dc2626;
+            color: white;
+            text-align: center;
+            padding: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            z-index: 100;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .api-status.connected {
+            background: #16a34a;
+        }
+        .api-status.connecting {
+            background: #ca8a04;
+        }
+        body.has-api-status .nav {
+            top: 40px;
+        }
+        body.has-api-status .hero {
+            padding-top: 9rem;
+        }
+        .nav { 
+            position: fixed; 
+            top: 0; 
+            width: 100%; 
+            background: rgba(15, 23, 42, 0.9); 
+            backdrop-filter: blur(10px); 
+            border-bottom: 1px solid rgba(71, 85, 105, 0.5); 
+            z-index: 50; 
+            padding: 1rem 2rem; 
+        }
+        .nav-content { 
+            max-width: 1200px; 
+            margin: 0 auto; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        .logo { 
+            font-size: 1.5rem; 
+            font-weight: bold; 
+        }
+        .logo .blue { color: #3b82f6; }
+        .nav-buttons { 
+            display: flex; 
+            gap: 1rem; 
+        }
+        .btn { 
+            padding: 0.75rem 1.5rem; 
+            border-radius: 0.5rem; 
+            text-decoration: none; 
+            font-weight: 600; 
+            transition: all 0.3s; 
+            border: none; 
+            cursor: pointer; 
+        }
+        .btn-primary { 
+            background: #2563eb; 
+            color: white; 
+        }
+        .btn-primary:hover { 
+            background: #1d4ed8; 
+            transform: translateY(-2px); 
+        }
+        .btn-secondary { 
+            background: rgba(71, 85, 105, 0.8); 
+            color: white; 
+            border: 1px solid #475569; 
+        }
+        .btn-secondary:hover { 
+            background: rgba(71, 85, 105, 1); 
+            transform: translateY(-2px); 
+        }
+        .hero { 
+            padding: 8rem 2rem 4rem; 
+            text-align: center; 
+            max-width: 1200px; 
+            margin: 0 auto; 
+        }
+        .hero h1 { 
+            font-size: 4rem; 
+            margin-bottom: 1.5rem; 
+            font-weight: bold; 
+        }
+        .hero p { 
+            font-size: 1.25rem; 
+            margin-bottom: 3rem; 
+            color: #cbd5e1; 
+        }
+        .cta-buttons { 
+            display: flex; 
+            gap: 1.5rem; 
+            justify-content: center; 
+            margin-bottom: 3rem; 
+            flex-wrap: wrap; 
+        }
+        .cta-buttons .btn { 
+            font-size: 1.125rem; 
+            padding: 1rem 2rem; 
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3); 
+        }
+        .alert { 
+            background: rgba(251, 191, 36, 0.1); 
+            border: 1px solid rgba(251, 191, 36, 0.3); 
+            border-radius: 0.75rem; 
+            padding: 1.5rem; 
+            margin: 2rem auto; 
+            max-width: 800px; 
+        }
+        .alert h3 { 
+            color: #fbbf24; 
+            margin-bottom: 0.5rem; 
+        }
+        .alert p { 
+            color: #fef3c7; 
+            font-size: 0.875rem; 
+        }
+        .admin-link { 
+            margin-top: 1rem; 
+            text-align: center; 
+        }
+        .admin-link a { 
+            color: #64748b; 
+            text-decoration: none; 
+            font-size: 0.875rem; 
+        }
+        .admin-link a:hover { 
+            color: #3b82f6; 
+        }
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2.5rem; }
+            .cta-buttons { flex-direction: column; align-items: center; }
+            .nav-content { flex-direction: column; gap: 1rem; }
+            .nav { position: static; }
+            .hero { padding-top: 4rem; }
+        }
+    </style>
+</head>
+<body class="has-api-status">
+    <!-- API Status Indicator -->
+    <div id="api-status" class="api-status connecting">
+        🔗 API Connection: Checking...
+    </div>
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <div class="logo">
+                Add<span class="blue">To</span>Cloud
+            </div>
+            <div class="nav-buttons">
+                <a href="/request-access.html" class="btn btn-secondary">Request Access</a>
+                <a href="/login.html" class="btn btn-primary">Sign In</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <main class="hero">
+        <h1>Add<span class="blue">To</span>Cloud</h1>
+        <p>Enterprise Cloud Platform for Modern Businesses</p>
+        <p>Deploy, manage, and scale your applications with our comprehensive cloud infrastructure.<br>
+        Built for enterprise needs with industry-leading security and performance.</p>
+
+        <!-- Main CTA Buttons -->
+        <div class="cta-buttons">
+            <a href="/request-access.html" class="btn btn-primary">🚀 Request Platform Access</a>
+            <a href="/login.html" class="btn btn-secondary">🔐 Sign In to Your Account</a>
+        </div>
+
+        <!-- Access Notice -->
+        <div class="alert">
+            <h3>🔐 Exclusive Platform Access</h3>
+            <p>
+                AddToCloud is an <strong>invite-only enterprise platform</strong> with manual approval by our admin team. 
+                Upon approval, each user receives a <strong>dedicated free-tier EC2 instance</strong> pre-configured with 
+                AWS CLI, Azure CLI, GCP CLI, and other cloud-native tools. Apply now to join our exclusive cloud community.
+            </p>
+        </div>
+
+        <!-- Admin Link -->
+        <div class="admin-link">
+            <a href="/admin-login.html">🔑 Admin Login</a>
+        </div>
+    </main>
+
+    <script>
+        // Basic interactive effects
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add click effects to buttons
+            document.querySelectorAll('.btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    // Create ripple effect
+                    const ripple = document.createElement('span');
+                    const rect = this.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    ripple.style.cssText = `
+                        position: absolute;
+                        background: rgba(255,255,255,0.3);
+                        border-radius: 50%;
+                        width: 20px;
+                        height: 20px;
+                        left: ${x-10}px;
+                        top: ${y-10}px;
+                        animation: ripple 0.6s ease-out;
+                        pointer-events: none;
+                    `;
+                    
+                    this.style.position = 'relative';
+                    this.style.overflow = 'hidden';
+                    this.appendChild(ripple);
+                    
+                    setTimeout(() => ripple.remove(), 600);
+                });
+            });
+        });
+
+        // Add ripple animation CSS
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes ripple {
+                0% { transform: scale(0); opacity: 1; }
+                100% { transform: scale(4); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // API Connection Status Checker
+        async function checkAPIStatus() {
+            const statusElement = document.getElementById('api-status');
+            
+            try {
+                const response = await fetch('/api/health', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 5000
+                });
+                
+                if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
+                    statusElement.className = 'api-status connected';
+                    statusElement.innerHTML = '✅ API Connection: Connected';
+                } else {
+                    statusElement.className = 'api-status';
+                    statusElement.innerHTML = '❌ API Connection: Failed (Static Mode)';
+                }
+            } catch (error) {
+                statusElement.className = 'api-status';
+                statusElement.innerHTML = '❌ API Connection: Failed';
+            }
+        }
+
+        // Check API status immediately and every 30 seconds
+        checkAPIStatus();
+        setInterval(checkAPIStatus, 30000);
+    </script>
+</body>
+</html>
