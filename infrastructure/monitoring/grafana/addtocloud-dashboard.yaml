@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: addtocloud-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  addtocloud-multicloud.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "AddToCloud Multi-Cloud Dashboard",
+        "tags": ["addtocloud", "multicloud", "kubernetes"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Multi-Cloud API Status",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "up{job=\"addtocloud-api\"}",
+                "legendFormat": "{{cluster}} - {{instance}}"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "thresholds"
+                },
+                "thresholds": {
+                  "steps": [
+                    {"color": "red", "value": 0},
+                    {"color": "green", "value": 1}
+                  ]
+                }
+              }
+            },
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+          },
+          {
+            "id": 2,
+            "title": "Request Rate per Cloud",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{job=\"addtocloud-api\"}[5m])",
+                "legendFormat": "{{cluster}} - {{method}} {{status}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+          },
+          {
+            "id": 3,
+            "title": "Pod Status by Cloud",
+            "type": "table",
+            "targets": [
+              {
+                "expr": "kube_pod_status_phase{namespace=\"addtocloud\"}",
+                "legendFormat": "{{cluster}} - {{pod}} - {{phase}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+          },
+          {
+            "id": 4,
+            "title": "Service Mesh Traffic",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "istio_requests_total{destination_service_name=\"addtocloud-api-service\"}",
+                "legendFormat": "{{source_cluster}} -> {{destination_cluster}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+          },
+          {
+            "id": 5,
+            "title": "Storage Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "kubelet_volume_stats_used_bytes{persistentvolumeclaim=\"addtocloud-storage\"}",
+                "legendFormat": "{{cluster}} - Storage Used"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+          },
+          {
+            "id": 6,
+            "title": "Database Connections",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "mongodb_connections{database=\"addtocloud\"}",
+                "legendFormat": "MongoDB - {{cluster}}"
+              },
+              {
+                "expr": "postgres_connections{database=\"addtocloud\"}",
+                "legendFormat": "PostgreSQL - {{cluster}}"
+              }
+            ],
+            "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24}
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "refresh": "30s"
+      }
+    }

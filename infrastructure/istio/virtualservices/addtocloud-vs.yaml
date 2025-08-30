@@ -1,0 +1,103 @@
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: addtocloud-gateway
+  namespace: addtocloud
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "api.addtocloud.tech"
+    - "eks-api.addtocloud.tech"
+    - "aks-api.addtocloud.tech"
+    - "gke-api.addtocloud.tech"
+    - "monitoring.addtocloud.tech"
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: addtocloud-tls
+    hosts:
+    - "api.addtocloud.tech"
+    - "eks-api.addtocloud.tech"
+    - "aks-api.addtocloud.tech"
+    - "gke-api.addtocloud.tech"
+    - "monitoring.addtocloud.tech"
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: addtocloud-vs
+  namespace: addtocloud
+spec:
+  hosts:
+  - "api.addtocloud.tech"
+  - "eks-api.addtocloud.tech"
+  - "aks-api.addtocloud.tech"
+  - "gke-api.addtocloud.tech"
+  gateways:
+  - addtocloud-gateway
+  http:
+  - match:
+    - uri:
+        prefix: /api/
+    route:
+    - destination:
+        host: addtocloud-api-service
+        port:
+          number: 80
+    corsPolicy:
+      allowOrigins:
+      - exact: "https://addtocloud.tech"
+      - regex: ".*\\.addtocloud\\.tech"
+      allowMethods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+      allowHeaders:
+      - authorization
+      - content-type
+      - x-requested-with
+      allowCredentials: true
+    fault:
+      delay:
+        percentage:
+          value: 0.1
+        fixedDelay: 5s
+    retries:
+      attempts: 3
+      perTryTimeout: 30s
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: addtocloud-api-dr
+  namespace: addtocloud
+spec:
+  host: addtocloud-api-service
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        maxRequestsPerConnection: 10
+    outlierDetection:
+      consecutiveErrors: 3
+      interval: 30s
+      baseEjectionTime: 30s
+  subsets:
+  - name: v1
+    labels:
+      version: v1

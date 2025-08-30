@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: addtocloud
+  labels:
+    name: addtocloud
+    istio-injection: enabled
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: addtocloud-api
+  namespace: addtocloud
+  labels:
+    app: addtocloud-api
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: addtocloud-api
+  template:
+    metadata:
+      labels:
+        app: addtocloud-api
+        version: v1
+    spec:
+      containers:
+      - name: addtocloud-api
+        image: ghcr.io/gokulupadhyayguragain/addtocloud-backend:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: PORT
+          value: "8080"
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-secrets
+              key: mongodb-uri
+        - name: POSTGRES_URI
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-secrets
+              key: postgres-uri
+        - name: REDIS_URI
+          valueFrom:
+            secretKeyRef:
+              name: addtocloud-secrets
+              key: redis-uri
+        - name: S3_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-config
+              key: s3-bucket
+        - name: AZURE_STORAGE_ACCOUNT
+          valueFrom:
+            configMapKeyRef:
+              name: addtocloud-config
+              key: azure-storage-account
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: storage-volume
+          mountPath: /app/data
+      volumes:
+      - name: storage-volume
+        persistentVolumeClaim:
+          claimName: addtocloud-storage
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: addtocloud-api-service
+  namespace: addtocloud
+  labels:
+    app: addtocloud-api
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: addtocloud-api
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: addtocloud-storage
+  namespace: addtocloud
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp2  # AWS EKS
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: addtocloud-config
+  namespace: addtocloud
+data:
+  s3-bucket: "addtocloud-storage"
+  azure-storage-account: "addtocloudstore"
+  gcp-bucket: "addtocloud-gcp-storage"
+  monitoring-endpoint: "https://monitoring.addtocloud.tech"
+  grafana-endpoint: "https://grafana.addtocloud.tech"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: addtocloud-secrets
+  namespace: addtocloud
+type: Opaque
+stringData:
+  mongodb-uri: "mongodb+srv://addtocloud:${MONGODB_PASSWORD}@cluster.mongodb.net/addtocloud"
+  postgres-uri: "postgres://addtocloud:${POSTGRES_PASSWORD}@postgres.addtocloud.tech:5432/addtocloud"
+  redis-uri: "redis://redis.addtocloud.tech:6379"

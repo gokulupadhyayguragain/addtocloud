@@ -1,63 +1,328 @@
-name: AddToCloud Master Pipeline
+name: Multi-Cloud Deployment Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [ main, develop ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 env:
   REGISTRY: ghcr.io
-  GO_VERSION: '1.21'
+  IMAGE_NAME: addtocloud
   NODE_VERSION: '18'
+  GO_VERSION: '1.21'
 
 jobs:
-  build-and-deploy:
+  test-and-build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      
+    outputs:
+      frontend-changed: ${{ steps.changes.outputs.frontend }}
+      backend-changed: ${{ steps.changes.outputs.backend }}
+      version: ${{ steps.version.outputs.version }}
+    
     steps:
-    - name: 🚀 Checkout Code
+    - name: Checkout code
       uses: actions/checkout@v4
-      
-    - name: 🐹 Setup Go
-      uses: actions/setup-go@v4
       with:
-        go-version: ${{ env.GO_VERSION }}
-        
-    - name: 📦 Setup Node.js
+        fetch-depth: 0
+
+    - name: Detect changes
+      uses: dorny/paths-filter@v2
+      id: changes
+      with:
+        filters: |
+          frontend:
+            - 'frontend/**'
+          backend:
+            - 'backend/**'
+            - 'go.mod'
+            - 'go.sum'
+
+    - name: Generate version
+      id: version
+      run: |
+        VERSION=$(date +%Y%m%d)-$(git rev-parse --short HEAD)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+    - name: Setup Node.js
+      if: steps.changes.outputs.frontend == 'true'
       uses: actions/setup-node@v4
       with:
         node-version: ${{ env.NODE_VERSION }}
-        
-    - name: 🔨 Build Go API
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Setup Go
+      if: steps.changes.outputs.backend == 'true'
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Install frontend dependencies
+      if: steps.changes.outputs.frontend == 'true'
+      working-directory: ./frontend
+      run: npm ci
+
+    - name: Test frontend
+      if: steps.changes.outputs.frontend == 'true'
+      working-directory: ./frontend
+      run: npm test -- --passWithNoTests
+
+    - name: Build frontend
+      if: steps.changes.outputs.frontend == 'true'
+      working-directory: ./frontend
+      run: npm run build
+
+    - name: Test backend
+      if: steps.changes.outputs.backend == 'true'
+      working-directory: ./backend
       run: |
-        cd backend
         go mod tidy
-        go build -o addtocloud-api cmd/api-server.go
-        echo "✅ Go API build successful"
-        
-    - name: 🎨 Build Frontend
+        go test ./...
+
+    - name: Build backend
+      if: steps.changes.outputs.backend == 'true'
+      working-directory: ./backend
       run: |
-        cd frontend
-        npm install
-        npm run build
-        echo "✅ Frontend build successful"
+        CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/main.go
+
+  build-and-push-images:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    strategy:
+      matrix:
+        component: [frontend, backend]
         
-    - name: 🧪 Test API Endpoints
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.component }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=${{ needs.test-and-build.outputs.version }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./infrastructure/docker/Dockerfile.${{ matrix.component }}
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        platforms: linux/amd64,linux/arm64
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy-frontend:
+    needs: [test-and-build, build-and-push-images]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && needs.test-and-build.outputs.frontend-changed == 'true'
+    
+    environment:
+      name: production
+      url: https://addtocloud.tech
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install dependencies
+      working-directory: ./frontend
+      run: npm ci
+
+    - name: Build for production
+      working-directory: ./frontend
+      env:
+        NEXT_PUBLIC_API_BASE_URL: https://api.addtocloud.tech
+        NEXT_PUBLIC_EKS_API: https://eks-api.addtocloud.tech
+        NEXT_PUBLIC_AKS_API: https://aks-api.addtocloud.tech
+        NEXT_PUBLIC_GKE_API: https://gke-api.addtocloud.tech
+        NEXT_PUBLIC_MONITORING_URL: https://monitoring.addtocloud.tech
+        NEXT_PUBLIC_GRAFANA_URL: https://grafana.addtocloud.tech
+      run: npm run build
+
+    - name: Deploy to CloudFlare Pages
+      uses: cloudflare/pages-action@v1
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        projectName: addtocloud
+        directory: frontend/out
+        gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-to-eks:
+    needs: [test-and-build, build-and-push-images]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && needs.test-and-build.outputs.backend-changed == 'true'
+    
+    environment:
+      name: aws-production
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2
+
+    - name: Update kubeconfig for EKS
       run: |
-        cd backend
-        echo "Testing Go API..."
-        timeout 10s go run cmd/api-server.go &
-        sleep 3
-        curl -f http://localhost:8080/api/health || echo "API test completed"
-        
-    - name: 📊 Build Status
+        aws eks update-kubeconfig --region us-west-2 --name addtocloud-eks
+
+    - name: Deploy to EKS
       run: |
-        echo "🌟 AddToCloud Platform Status:"
-        echo "✅ Go API: Ready for deployment"
-        echo "✅ Frontend: Built and ready"
-        echo "✅ 360+ Services: Processing..."
-        echo "✅ Multi-Cloud: AWS, Azure, GCP ready"
+        # Update image in deployment
+        kubectl set image deployment/addtocloud-api addtocloud-api=${{ env.REGISTRY }}/${{ github.repository }}-backend:${{ needs.test-and-build.outputs.version }} -n addtocloud
+        kubectl rollout status deployment/addtocloud-api -n addtocloud
+
+    - name: Verify EKS deployment
+      run: |
+        kubectl get pods -n addtocloud
+        kubectl get services -n addtocloud
+
+  deploy-to-aks:
+    needs: [test-and-build, build-and-push-images]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && needs.test-and-build.outputs.backend-changed == 'true'
+    
+    environment:
+      name: azure-production
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials --resource-group addtocloud-rg --name addtocloud-aks
+
+    - name: Deploy to AKS
+      run: |
+        # Update image in deployment
+        kubectl set image deployment/addtocloud-api addtocloud-api=${{ env.REGISTRY }}/${{ github.repository }}-backend:${{ needs.test-and-build.outputs.version }} -n addtocloud
+        kubectl rollout status deployment/addtocloud-api -n addtocloud
+
+    - name: Verify AKS deployment
+      run: |
+        kubectl get pods -n addtocloud
+        kubectl get services -n addtocloud
+
+  deploy-to-gke:
+    needs: [test-and-build, build-and-push-images]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && needs.test-and-build.outputs.backend-changed == 'true'
+    
+    environment:
+      name: gcp-production
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Configure kubectl for GKE
+      run: |
+        gcloud container clusters get-credentials addtocloud-gke --zone us-central1-a --project ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Deploy to GKE
+      run: |
+        # Update image in deployment
+        kubectl set image deployment/addtocloud-api addtocloud-api=${{ env.REGISTRY }}/${{ github.repository }}-backend:${{ needs.test-and-build.outputs.version }} -n addtocloud
+        kubectl rollout status deployment/addtocloud-api -n addtocloud
+
+    - name: Verify GKE deployment
+      run: |
+        kubectl get pods -n addtocloud
+        kubectl get services -n addtocloud
+
+  deploy-monitoring:
+    needs: [deploy-to-eks, deploy-to-aks, deploy-to-gke]
+    runs-on: ubuntu-latest
+    if: always() && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy Grafana dashboards
+      run: |
+        echo "Deploying Grafana dashboards to monitoring.addtocloud.tech"
+        # This would update Grafana dashboards via API
+
+    - name: Update ArgoCD applications
+      run: |
+        echo "Syncing ArgoCD applications"
+        # This would trigger ArgoCD sync
+
+    - name: Health check all clusters
+      run: |
+        echo "Performing health checks across all clusters"
+        # This would verify all services are healthy
+
+  notify:
+    needs: [deploy-frontend, deploy-to-eks, deploy-to-aks, deploy-to-gke, deploy-monitoring]
+    runs-on: ubuntu-latest
+    if: always() && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Deployment notification
+      run: |
+        if [ "${{ needs.deploy-frontend.result }}" == "success" ] && 
+           [ "${{ needs.deploy-to-eks.result }}" == "success" ] && 
+           [ "${{ needs.deploy-to-aks.result }}" == "success" ] && 
+           [ "${{ needs.deploy-to-gke.result }}" == "success" ]; then
+          echo "✅ Multi-cloud deployment successful!"
+          echo "🌐 Frontend: https://addtocloud.tech"
+          echo "⚡ EKS API: https://eks-api.addtocloud.tech"
+          echo "🌐 AKS API: https://aks-api.addtocloud.tech"
+          echo "☁️ GKE API: https://gke-api.addtocloud.tech"
+          echo "📊 Monitoring: https://monitoring.addtocloud.tech"
+          echo "📈 Grafana: https://grafana.addtocloud.tech"
+        else
+          echo "❌ Deployment failed in one or more clouds"
+          exit 1
+        fi
