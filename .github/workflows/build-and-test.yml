@@ -45,8 +45,8 @@ jobs:
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
-        context: ./apps/backend
-        file: ./apps/backend/Dockerfile
+        context: ./backend
+        file: ./infrastructure/docker/Dockerfile.backend
         push: true
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
@@ -65,16 +65,16 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: apps/frontend/package-lock.json
+        cache-dependency-path: frontend/package-lock.json
         
     - name: Install dependencies
       run: |
-        cd apps/frontend
+        cd frontend
         npm ci
         
     - name: Build frontend
       run: |
-        cd apps/frontend
+        cd frontend
         npm run build
         echo "✅ Frontend build completed successfully"
         ls -la out/ || echo "No out directory found"
@@ -83,7 +83,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: frontend-build
-        path: apps/frontend/out
+        path: frontend/out
         retention-days: 30
 
   test-credential-service:
@@ -98,12 +98,12 @@ jobs:
       with:
         go-version: '1.23'
         
-    - name: Test credential service
+    - name: Test Go backend
       run: |
-        cd apps/credential-service
+        cd backend
         go mod tidy
-        go build -o credential-service .
-        echo "✅ Credential service builds successfully"
+        go build -o addtocloud-api cmd/api-server.go
+        echo "✅ Go backend builds successfully"
 
   deployment-status:
     needs: [build-backend, build-frontend, test-credential-service]
