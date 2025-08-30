@@ -3,7 +3,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { getAllServices } from '../lib/services';
 
-const API_BASE_URL = 'http://a646114b86e1c4d03a014b1a8fa217d0-832697644.us-west-2.elb.amazonaws.com';
+const API_BASE_URL = 'https://addtocloud-api-proxy.gocools.workers.dev';
 
 export default function Services() {
   const [services, setServices] = useState([]);
