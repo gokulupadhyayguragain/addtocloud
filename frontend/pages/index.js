@@ -62,12 +62,22 @@ export default function Home() {
             </p>
             
             {/* Authentication-aware CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
-              <Link href="/request-access" className="btn-primary">
+            <div className="flex flex-col sm:flex-row gap-6 justify-center mb-16">
+              <Link href="/request-access" className="btn-primary text-lg py-4 px-8 shadow-2xl hover:shadow-blue-500/25 transform hover:scale-105 transition-all duration-300">
                 🚀 Request Platform Access
               </Link>
-              <Link href="/login" className="btn-secondary">
-                Already Have Access? Sign In
+              <Link href="/login" className="btn-secondary text-lg py-4 px-8 shadow-2xl hover:shadow-slate-500/25 transform hover:scale-105 transition-all duration-300">
+                🔐 Sign In to Your Account
+              </Link>
+            </div>
+
+            {/* Secondary CTA for Admin */}
+            <div className="mb-8">
+              <Link href="/admin-login" className="inline-flex items-center gap-2 text-slate-400 hover:text-blue-400 transition-colors text-sm">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 6h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                Admin Login
               </Link>
             </div>
             

@@ -63,21 +63,21 @@ export default function Navigation() {
             {/* Auth Buttons */}
             {!isAuthenticated() ? (
               <div className="flex items-center space-x-4">
-                <Link href="/request-access" className="btn-secondary text-sm py-2 px-4">
+                <Link href="/request-access" className="btn-secondary text-sm py-2 px-4 font-semibold shadow-lg hover:shadow-blue-500/20 transition-all">
                   Request Access
                 </Link>
-                <Link href="/login" className="btn-primary text-sm py-2 px-4">
+                <Link href="/login" className="btn-primary text-sm py-2 px-4 font-semibold shadow-lg hover:shadow-blue-500/20 transition-all">
                   Sign In
                 </Link>
               </div>
             ) : (
               <div className="flex items-center space-x-4">
                 <span className="text-slate-300 text-sm">
-                  {user ? `${user.firstName} ${user.lastName}` : 'User'}
+                  Welcome, {user ? `${user.firstName} ${user.lastName}` : 'User'}
                 </span>
                 <button
                   onClick={handleLogout}
-                  className="bg-red-600 hover:bg-red-700 text-white text-sm py-2 px-4 rounded-lg transition-colors"
+                  className="bg-red-600 hover:bg-red-700 text-white text-sm py-2 px-4 rounded-lg transition-colors font-semibold"
                 >
                   Logout
                 </button>

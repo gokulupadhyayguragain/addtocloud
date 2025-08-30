@@ -162,8 +162,8 @@ jobs:
         NEXT_PUBLIC_EKS_API: https://eks-api.addtocloud.tech
         NEXT_PUBLIC_AKS_API: https://aks-api.addtocloud.tech
         NEXT_PUBLIC_GKE_API: https://gke-api.addtocloud.tech
-        NEXT_PUBLIC_MONITORING_URL: https://monitoring.addtocloud.tech
-        NEXT_PUBLIC_GRAFANA_URL: https://grafana.addtocloud.tech
+        NEXT_PUBLIC_MONITORING_URL: https://addtocloud.tech/monitoring
+        NEXT_PUBLIC_GRAFANA_URL: https://addtocloud.tech/grafana
       run: npm run build
 
     - name: Deploy to CloudFlare Pages
