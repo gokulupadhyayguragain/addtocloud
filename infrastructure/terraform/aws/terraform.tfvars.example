@@ -1,0 +1,40 @@
+# EC2 Deployment Configuration for AddToCloud
+# Copy this file to terraform.tfvars and customize the values
+
+# Project Configuration
+project_name = "addtocloud"
+environment  = "production"
+aws_region   = "us-west-2"
+
+# SSH Key Configuration
+# Generate a key pair: ssh-keygen -t rsa -b 4096 -f ~/.ssh/addtocloud-production-key
+# Then paste the public key content here
+ec2_public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC... your-public-key-here"
+
+# Instance Types (adjust based on your needs and budget)
+ec2_instance_type_frontend = "t3.small"   # 2 vCPU, 2 GB RAM - $0.0208/hour
+ec2_instance_type_backend  = "t3.medium"  # 2 vCPU, 4 GB RAM - $0.0416/hour  
+ec2_instance_type_database = "t3.medium"  # 2 vCPU, 4 GB RAM - $0.0416/hour
+
+# Storage Configuration
+ec2_root_volume_size           = 20   # GB for OS and applications
+ec2_database_volume_size       = 30   # GB for database root volume
+ec2_database_data_volume_size  = 100  # GB for database data storage
+
+# Network Configuration
+vpc_cidr               = "10.1.0.0/16"
+public_subnet_cidrs    = ["10.1.1.0/24", "10.1.2.0/24"]
+private_subnet_cidrs   = ["10.1.10.0/24", "10.1.20.0/24"]
+availability_zones     = ["us-west-2a", "us-west-2b"]
+
+# Domain Configuration
+domain_name = "addtocloud.tech"
+
+# Common Tags
+common_tags = {
+  Project     = "AddToCloud"
+  Environment = "production"
+  ManagedBy   = "Terraform"
+  Owner       = "AddToCloud-Team"
+  Purpose     = "Enterprise-Cloud-Platform"
+}

@@ -113,6 +113,34 @@ spec:
             secretKeyRef:
               name: redis-secret
               key: url
+        # OTP Email Configuration
+        - name: SMTP_HOST
+          valueFrom:
+            secretKeyRef:
+              name: otp-email-config
+              key: smtp-host
+        - name: SMTP_PORT
+          valueFrom:
+            secretKeyRef:
+              name: otp-email-config
+              key: smtp-port
+        - name: SMTP_USER
+          valueFrom:
+            secretKeyRef:
+              name: otp-email-config
+              key: smtp-user
+        - name: SMTP_PASS
+          valueFrom:
+            secretKeyRef:
+              name: otp-email-config
+              key: smtp-pass
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: jwt-secret
+              key: secret
+        - name: ADMIN_EMAIL
+          value: "admin@addtocloud.tech"
         resources:
           requests:
             memory: "512Mi"
@@ -122,13 +150,13 @@ spec:
             cpu: "1000m"
         livenessProbe:
           httpGet:
-            path: /health
+            path: /api/health
             port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /health
+            path: /api/health
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5

@@ -1,8 +1,191 @@
-# Multi-Cloud Deployment Script
-# Deploys AddToCloud platform across AWS, GCP, and Azure
+# AddToCloud Enterprise Multi-Cloud Deployment Script
+# Deploy to Azure AKS, AWS EKS, and GCP GKE clusters
 
-Write-Host "🚀 Starting Multi-Cloud Deployment for AddToCloud Platform" -ForegroundColor Green
-Write-Host ""
+param(
+    [string]$Environment = "production",
+    [string]$Version = "latest",
+    [switch]$BuildImages,
+    [switch]$DeployInfra,
+    [switch]$DeployApps,
+    [switch]$All
+)
+
+Write-Host "🚀 AddToCloud Enterprise Multi-Cloud Deployment" -ForegroundColor Cyan
+Write-Host "================================================" -ForegroundColor Cyan
+
+# Configuration
+$PROJECT_NAME = "addtocloud"
+$REPO_NAME = "ghcr.io/gokulupadhyayguragain"
+$CLUSTERS = @{
+    "azure" = @{
+        "name" = "aks-addtocloud-prod"
+        "resource_group" = "rg-addtocloud-prod" 
+        "context" = "aks-addtocloud-prod"
+    }
+    "aws" = @{
+        "name" = "addtocloud-eks-prod"
+        "region" = "us-east-1"
+        "context" = "addtocloud-eks-prod"
+    }
+    "gcp" = @{
+        "name" = "addtocloud-gke-prod"
+        "zone" = "us-central1-a"
+        "project" = "addtocloud-prod"
+        "context" = "gke_addtocloud-prod_us-central1-a_addtocloud-gke-prod"
+    }
+}
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host "`n✅ $Message" -ForegroundColor Green
+}
+
+function Build-ContainerImages {
+    Write-Step "Building container images for OTP-enabled backend..."
+    
+    # Build backend with OTP support
+    Write-Host "📦 Building OTP-enabled backend image..."
+    docker build -f infrastructure/docker/Dockerfile.backend -t "$REPO_NAME/addtocloud-backend:$Version" ./backend/ --build-arg MAIN_FILE=main-otp-admin.go
+    
+    # Build frontend
+    Write-Host "� Building frontend image..."
+    docker build -f infrastructure/docker/Dockerfile.frontend -t "$REPO_NAME/addtocloud-frontend:$Version" ./frontend/
+    
+    # Push images
+    Write-Host "📤 Pushing images to GitHub Container Registry..."
+    docker push "$REPO_NAME/addtocloud-backend:$Version"
+    docker push "$REPO_NAME/addtocloud-frontend:$Version"
+    
+    Write-Step "Container images built and pushed successfully!"
+}
+
+function Deploy-Infrastructure {
+    Write-Step "Deploying infrastructure to multi-cloud..."
+    
+    # Deploy Azure AKS
+    Write-Host "🏗️  Deploying Azure AKS infrastructure..."
+    Push-Location infrastructure/terraform/azure
+    try {
+        terraform init
+        terraform plan -var="environment=$Environment"
+        terraform apply -auto-approve -var="environment=$Environment"
+        az aks get-credentials --resource-group rg-addtocloud-prod --name aks-addtocloud-prod --overwrite-existing
+    }
+    finally {
+        Pop-Location
+    }
+    
+    # Deploy AWS EKS
+    Write-Host "🏗️  Deploying AWS EKS infrastructure..."
+    Push-Location infrastructure/terraform/aws
+    try {
+        terraform init
+        terraform apply -auto-approve -var="environment=$Environment"
+        aws eks update-kubeconfig --region us-east-1 --name addtocloud-eks-prod
+    }
+    finally {
+        Pop-Location
+    }
+    
+    # Deploy GCP GKE  
+    Write-Host "🏗️  Deploying GCP GKE infrastructure..."
+    Push-Location infrastructure/terraform/gcp
+    try {
+        terraform init
+        terraform apply -auto-approve -var="environment=$Environment"
+        gcloud container clusters get-credentials addtocloud-gke-prod --zone us-central1-a --project addtocloud-prod
+    }
+    finally {
+        Pop-Location
+    }
+    
+    Write-Step "Multi-cloud infrastructure deployed successfully!"
+}
+
+function Deploy-Applications {
+    Write-Step "Deploying applications to all clusters..."
+    
+    foreach ($cloud in $CLUSTERS.Keys) {
+        $cluster = $CLUSTERS[$cloud]
+        Write-Host "🚀 Deploying to $cloud cluster: $($cluster.name)"
+        
+        kubectl config use-context $cluster.context
+        
+        # Create namespace YAML
+        $namespaceYaml = @"
+apiVersion: v1
+kind: Namespace  
+metadata:
+  name: addtocloud-prod
+  labels:
+    istio-injection: enabled
+    cloud-provider: $cloud
+    environment: $Environment
+"@
+        
+        # Apply namespace
+        $namespaceYaml | kubectl apply -f -
+        
+        # Deploy secrets
+        kubectl create secret generic db-credentials `
+            --from-literal=username=addtocloudadmin `
+            --from-literal=password=$env:DB_PASSWORD `
+            --namespace=addtocloud-prod `
+            --dry-run=client -o yaml | kubectl apply -f -
+            
+        kubectl create secret generic otp-email-config `
+            --from-literal=smtp-host=$env:SMTP_HOST `
+            --from-literal=smtp-port=$env:SMTP_PORT `
+            --from-literal=smtp-user=$env:SMTP_USER `
+            --from-literal=smtp-pass=$env:SMTP_PASS `
+            --namespace=addtocloud-prod `
+            --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Deploy applications
+        kubectl apply -f infrastructure/kubernetes/deployments/app.yaml
+        kubectl apply -f infrastructure/kubernetes/services/
+        kubectl apply -f infrastructure/istio/gateways/
+        kubectl apply -f infrastructure/istio/virtualservices/
+        
+        # Wait for rollout
+        kubectl rollout status deployment/frontend -n addtocloud-prod --timeout=300s
+        kubectl rollout status deployment/backend -n addtocloud-prod --timeout=300s
+        
+        Write-Host "✅ Deployment to $cloud completed!"
+    }
+}
+
+function Setup-ArgoCD {
+    Write-Step "Setting up ArgoCD GitOps..."
+    
+    foreach ($cloud in $CLUSTERS.Keys) {
+        $cluster = $CLUSTERS[$cloud]
+        kubectl config use-context $cluster.context
+        
+        # Install ArgoCD
+        kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+        kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+        
+        # Apply ArgoCD applications
+        kubectl apply -f devops/argocd/applications.yaml
+        
+        Write-Host "✅ ArgoCD setup completed on $cloud!"
+    }
+}
+
+function Verify-Deployment {
+    Write-Step "Verifying deployments across all clusters..."
+    
+    foreach ($cloud in $CLUSTERS.Keys) {
+        $cluster = $CLUSTERS[$cloud]
+        Write-Host "`n🔍 Checking $cloud cluster status..."
+        
+        kubectl config use-context $cluster.context
+        kubectl get pods -n addtocloud-prod
+        kubectl get svc -n addtocloud-prod
+        kubectl get ingress -n addtocloud-prod
+    }
+}
 
 # Check prerequisites
 Write-Host "📋 Checking Prerequisites..." -ForegroundColor Blue
@@ -14,8 +197,45 @@ foreach ($tool in $tools) {
         Write-Host "✅ $tool is installed" -ForegroundColor Green
     } else {
         Write-Host "❌ $tool is not installed" -ForegroundColor Red
-        exit 1
+# Main execution logic
+try {
+    if ($All) {
+        $BuildImages = $true
+        $DeployInfra = $true
+        $DeployApps = $true
     }
+    
+    if ($BuildImages) {
+        Build-ContainerImages
+    }
+    
+    if ($DeployInfra) {
+        Deploy-Infrastructure
+    }
+    
+    if ($DeployApps) {
+        Deploy-Applications
+        Setup-ArgoCD
+    }
+    
+    Verify-Deployment
+    
+    Write-Host "`n🎉 AddToCloud Enterprise Multi-Cloud Deployment Completed!" -ForegroundColor Green
+    Write-Host "📊 Monitoring: Available on all clusters via Istio" -ForegroundColor Cyan
+    Write-Host "🔄 GitOps: ArgoCD managing continuous deployment" -ForegroundColor Cyan
+    Write-Host "🌐 Access: https://addtocloud.tech" -ForegroundColor Cyan
+    Write-Host "🔐 Admin: OTP authentication at /admin-login" -ForegroundColor Cyan
+    
+    # Display cluster access information
+    Write-Host "`n📋 Cluster Access Information:" -ForegroundColor Yellow
+    Write-Host "Azure AKS: az aks get-credentials --resource-group rg-addtocloud-prod --name aks-addtocloud-prod"
+    Write-Host "AWS EKS: aws eks update-kubeconfig --region us-east-1 --name addtocloud-eks-prod"
+    Write-Host "GCP GKE: gcloud container clusters get-credentials addtocloud-gke-prod --zone us-central1-a --project addtocloud-prod"
+    
+}
+catch {
+    Write-Host "`n❌ Deployment failed: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
 }
 
 Write-Host ""

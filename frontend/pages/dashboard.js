@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import { ProtectedRoute, useAuth } from '../context/AuthContext';
 
 const API_BASE_URL = 'https://api.addtocloud.tech';
 
-export default function Dashboard() {
+function DashboardContent() {
+  const { user, logout } = useAuth();
   const [metrics, setMetrics] = useState({
     totalServices: 0,
     activeDeployments: 0,
@@ -89,6 +91,17 @@ export default function Dashboard() {
                   Monitoring
                 </Link>
               </nav>
+              <div className="flex items-center space-x-4">
+                <span className="text-slate-300 text-sm">
+                  Welcome, {user?.firstName || user?.email || 'User'}
+                </span>
+                <button
+                  onClick={logout}
+                  className="bg-red-600 hover:bg-red-700 text-white text-sm py-2 px-4 rounded-lg transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -251,5 +264,13 @@ export default function Dashboard() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <ProtectedRoute>
+      <DashboardContent />
+    </ProtectedRoute>
   );
 }

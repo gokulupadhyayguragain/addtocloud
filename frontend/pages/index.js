@@ -1,375 +1,162 @@
-import { useState, useEffect, Suspense } from 'react'
-import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Sphere, MeshDistortMaterial, Environment, Float, Text3D } from '@react-three/drei'
-import { motion } from 'framer-motion'
-import Link from 'next/link'
 import Head from 'next/head'
-import ContactForm from '../components/ui/ContactForm'
-
-// Cloud Environment APIs - Use working endpoints
-const CLOUD_APIS = {
-  eks: process.env.NEXT_PUBLIC_EKS_API || 'https://api.addtocloud.tech',
-  aks: process.env.NEXT_PUBLIC_AKS_API || 'https://api.addtocloud.tech', 
-  gke: process.env.NEXT_PUBLIC_GKE_API || 'https://api.addtocloud.tech',
-  monitoring: process.env.NEXT_PUBLIC_MONITORING_URL || 'https://api.addtocloud.tech',
-  grafana: process.env.NEXT_PUBLIC_GRAFANA_URL || 'https://grafana.addtocloud.tech',
-  base: process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.addtocloud.tech'
-}
-
-function AnimatedSphere() {
-  return (
-    <Float speed={1.4} rotationIntensity={1} floatIntensity={2}>
-      <Sphere visible args={[1, 100, 200]} scale={2}>
-        <MeshDistortMaterial
-          color="#3b82f6"
-          attach="material"
-          distort={0.5}
-          speed={2}
-          roughness={0}
-          metalness={0.8}
-        />
-      </Sphere>
-    </Float>
-  )
-}
-
-function CloudNodes() {
-  const nodes = [
-    { position: [-4, 2, 0], color: "#ff6b6b", label: "EKS" },
-    { position: [4, 2, 0], color: "#4ecdc4", label: "AKS" },
-    { position: [0, -2, 0], color: "#45b7d1", label: "GKE" },
-  ]
-
-  return (
-    <>
-      {nodes.map((node, i) => (
-        <Float key={i} speed={1 + i * 0.2} rotationIntensity={0.5}>
-          <mesh position={node.position}>
-            <sphereGeometry args={[0.5, 32, 32]} />
-            <meshStandardMaterial color={node.color} emissive={node.color} emissiveIntensity={0.2} />
-          </mesh>
-        </Float>
-      ))}
-    </>
-  )
-}
-
-function CloudParticles() {
-  const particles = Array.from({ length: 100 }, (_, i) => (
-    <mesh key={i} position={[
-      (Math.random() - 0.5) * 20,
-      (Math.random() - 0.5) * 20,
-      (Math.random() - 0.5) * 20
-    ]}>
-      <sphereGeometry args={[0.01, 8, 8]} />
-      <meshStandardMaterial color="#60a5fa" opacity={0.6} transparent />
-    </mesh>
-  ))
-  return <>{particles}</>
-}
+import Link from 'next/link'
+import { useEffect } from 'react'
+import { useRouter } from 'next/router'
+import Navigation from '../components/layout/Navigation'
+import { useAuth } from '../context/AuthContext'
 
 export default function Home() {
-  const [cloudStats, setCloudStats] = useState({
-    eks: { status: 'checking...', pods: 0, nodes: 0, cpu: 0, memory: 0 },
-    aks: { status: 'checking...', pods: 0, nodes: 0, cpu: 0, memory: 0 },
-    gke: { status: 'checking...', pods: 0, nodes: 0, cpu: 0, memory: 0 },
-    services: 360,
-    totalRequests: 0,
-    activeDeployments: 0
-  })
-
-  const [realTimeMetrics, setRealTimeMetrics] = useState({
-    throughput: 0,
-    latency: 0,
-    errorRate: 0,
-    uptime: 99.9
-  })
+  const { isAuthenticated, loading } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
-    // Check all cloud cluster status from unified API
-    const checkCloudStatus = async () => {
-      try {
-        // Try to get unified status from our API
-        const statusResponse = await fetch(`${CLOUD_APIS.base}/api/v1/status`).catch(() => null)
-        const metricsResponse = await fetch(`${CLOUD_APIS.base}/api/v1/metrics`).catch(() => null)
-        
-        if (statusResponse && statusResponse.ok) {
-          const statusData = await statusResponse.json()
-          setCloudStats(prev => ({
-            ...prev,
-            eks: statusData.eks || { status: 'online', pods: 6, nodes: 3, cpu: 45.5, memory: 67.2 },
-            aks: statusData.aks || { status: 'online', pods: 4, nodes: 3, cpu: 38.1, memory: 72.5 },
-            gke: statusData.gke || { status: 'online', pods: 5, nodes: 3, cpu: 52.3, memory: 61.8 },
-            services: statusData.services || 360,
-            totalRequests: statusData.totalRequests || 15420,
-            activeDeployments: statusData.activeDeployments || 15
-          }))
-        }
+    // Redirect authenticated users to dashboard
+    if (!loading && isAuthenticated()) {
+      router.push('/dashboard');
+    }
+  }, [isAuthenticated, loading, router]);
 
-        if (metricsResponse && metricsResponse.ok) {
-          const metricsData = await metricsResponse.json()
-          setRealTimeMetrics(prev => ({
-            throughput: metricsData.throughput || Math.floor(Math.random() * 1000) + 500,
-            latency: metricsData.latency || Math.floor(Math.random() * 50) + 20,
-            errorRate: metricsData.errorRate || (Math.random() * 0.5).toFixed(2),
-            uptime: metricsData.uptime || 99.9
-          }))
-        } else {
-          // Fallback to simulated metrics if API unavailable
-          setRealTimeMetrics(prev => ({
-            throughput: Math.floor(Math.random() * 1000) + 500,
-            latency: Math.floor(Math.random() * 50) + 20,
-            errorRate: (Math.random() * 0.5).toFixed(2),
-            uptime: (99.5 + Math.random() * 0.5)
-          }))
-        }
-      } catch (error) {
-        console.log('Loading cloud status...', error.message)
-        // Set default values on error
-        setCloudStats(prev => ({
-          ...prev,
-          eks: { status: 'online', pods: 6, nodes: 3, cpu: 45.5, memory: 67.2 },
-          aks: { status: 'online', pods: 4, nodes: 3, cpu: 38.1, memory: 72.5 },
-          gke: { status: 'online', pods: 5, nodes: 3, cpu: 52.3, memory: 61.8 },
-          services: 360,
-          totalRequests: 15420,
-          activeDeployments: 15
-        }))
-      }
-    }
-    
-    checkCloudStatus()
-    const interval = setInterval(checkCloudStatus, 10000) // Check every 10 seconds
-    
-    // Simulate real-time metrics updates
-    const metricsInterval = setInterval(() => {
-      setRealTimeMetrics(prev => ({
-        throughput: Math.floor(Math.random() * 1000) + 500,
-        latency: Math.floor(Math.random() * 50) + 20,
-        errorRate: (Math.random() * 0.5).toFixed(2),
-        uptime: (99.5 + Math.random() * 0.5).toFixed(1)
-      }))
-    }, 3000)
-    
-    return () => {
-      clearInterval(interval)
-      clearInterval(metricsInterval)
-    }
-  }, [])
+  // Show loading while checking auth
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-slate-300 text-lg">Loading AddToCloud...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
       <Head>
-        <title>AddToCloud - Multi-Cloud Kubernetes Platform</title>
-        <meta name="description" content="Deploy across AWS EKS, Azure AKS, Google GKE with Istio service mesh, ArgoCD, Grafana monitoring" />
+        <title>AddToCloud - Enterprise Cloud Platform</title>
+        <meta name="description" content="Next-generation enterprise cloud platform with professional services" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 overflow-hidden">
-        {/* 3D Background */}
-        <div className="absolute inset-0 z-0">
-          <Canvas camera={{ position: [0, 0, 8] }}>
-            <Suspense fallback={null}>
-              <ambientLight intensity={0.3} />
-              <directionalLight position={[10, 10, 5]} intensity={1} />
-              <spotLight position={[0, 10, 0]} angle={0.3} penumbra={1} intensity={0.5} />
-              <AnimatedSphere />
-              <CloudNodes />
-              <CloudParticles />
-              <Environment preset="night" />
-              <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.5} />
-            </Suspense>
-          </Canvas>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
+        <Navigation />
 
-        {/* Content */}
-        <div className="relative z-10 min-h-screen flex flex-col">
-          {/* Navigation */}
-          <nav className="p-6 flex justify-between items-center backdrop-blur-md bg-black/20 border-b border-white/10">
-            <motion.div 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="text-2xl font-bold text-white flex items-center"
-            >
-              <span className="mr-2">☁️</span>
-              AddToCloud
-            </motion.div>
-            <div className="flex space-x-6">
-              <Link href="/services" className="text-white/80 hover:text-white transition-colors font-medium">360+ Services</Link>
-              <Link href="/monitoring" className="text-white/80 hover:text-white transition-colors font-medium">Monitoring</Link>
-              <Link href="/dashboard" className="text-white/80 hover:text-white transition-colors font-medium">Dashboard</Link>
-              <a href={CLOUD_APIS.grafana} target="_blank" rel="noopener noreferrer" className="text-white/80 hover:text-white transition-colors font-medium">Grafana</a>
+        {/* Hero Section */}
+        <section className="pt-24 pb-16 px-4">
+          <div className="max-w-7xl mx-auto text-center">
+            {/* Main Heading */}
+            <h1 className="text-5xl md:text-7xl font-bold mb-6">
+              <span className="text-white">Add</span>
+              <span className="text-gradient">To</span>
+              <span className="text-white">Cloud</span>
+            </h1>
+            
+            {/* Subtitle */}
+            <p className="text-2xl md:text-3xl text-slate-300 mb-8 max-w-4xl mx-auto">
+              Enterprise Cloud Platform for Modern Businesses
+            </p>
+            
+            {/* Description */}
+            <p className="text-lg text-slate-400 mb-12 max-w-3xl mx-auto leading-relaxed">
+              Deploy, manage, and scale your applications with our comprehensive cloud infrastructure. 
+              Built for enterprise needs with industry-leading security and performance.
+            </p>
+            
+            {/* Authentication-aware CTA Buttons */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
+              <Link href="/request-access" className="btn-primary">
+                🚀 Request Platform Access
+              </Link>
+              <Link href="/login" className="btn-secondary">
+                Already Have Access? Sign In
+              </Link>
             </div>
-          </nav>
-
-          {/* Hero Section */}
-          <div className="flex-1 flex items-center justify-center px-6">
-            <div className="text-center max-w-6xl">
-              <motion.h1 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8 }}
-                className="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight"
-              >
-                Multi-Cloud
-                <span className="block bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  Kubernetes Platform
-                </span>
-              </motion.h1>
+            
+            {/* Access Note */}
+            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-6 mb-16 max-w-4xl mx-auto">
+              <div className="flex items-start gap-4">
+                <div className="w-8 h-8 bg-yellow-500/20 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                  <svg className="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-yellow-300 mb-2">🔐 Exclusive Platform Access</h3>
+                  <p className="text-yellow-100 text-sm leading-relaxed">
+                    AddToCloud is an <strong>invite-only enterprise platform</strong> with manual approval by our admin team. 
+                    Upon approval, each user receives a <strong>dedicated free-tier EC2 instance</strong> pre-configured with 
+                    AWS CLI, Azure CLI, GCP CLI, and other cloud-native tools. Apply now to join our exclusive cloud community.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Feature Cards */}
+            <div className="grid md:grid-cols-3 gap-8 mt-20">
+              <div className="card text-center">
+                <div className="w-16 h-16 bg-primary-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-3">High Performance</h3>
+                <p className="text-slate-400">Lightning-fast infrastructure with 99.9% uptime guarantee</p>
+              </div>
               
-              <motion.p 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.2 }}
-                className="text-xl text-white/80 mb-12 max-w-4xl mx-auto"
-              >
-                Deploy across <strong>AWS EKS</strong>, <strong>Azure AKS</strong>, and <strong>Google GKE</strong> with unified 
-                Istio service mesh, ArgoCD automation, Grafana/Prometheus monitoring, and persistent storage across clouds.
-              </motion.p>
-
-              {/* Real-time Metrics */}
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.3 }}
-                className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8"
-              >
-                <div className="backdrop-blur-md bg-green-500/10 border border-green-500/20 rounded-xl p-4">
-                  <div className="text-2xl font-bold text-green-400">{realTimeMetrics.throughput}</div>
-                  <div className="text-sm text-white/60">req/sec</div>
+              <div className="card text-center">
+                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                 </div>
-                <div className="backdrop-blur-md bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
-                  <div className="text-2xl font-bold text-blue-400">{realTimeMetrics.latency}ms</div>
-                  <div className="text-sm text-white/60">latency</div>
+                <h3 className="text-xl font-semibold text-white mb-3">Enterprise Security</h3>
+                <p className="text-slate-400">Bank-level security with advanced threat protection</p>
+              </div>
+              
+              <div className="card text-center">
+                <div className="w-16 h-16 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
                 </div>
-                <div className="backdrop-blur-md bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
-                  <div className="text-2xl font-bold text-yellow-400">{realTimeMetrics.errorRate}%</div>
-                  <div className="text-sm text-white/60">error rate</div>
-                </div>
-                <div className="backdrop-blur-md bg-purple-500/10 border border-purple-500/20 rounded-xl p-4">
-                  <div className="text-2xl font-bold text-purple-400">{realTimeMetrics.uptime}%</div>
-                  <div className="text-sm text-white/60">uptime</div>
-                </div>
-              </motion.div>
-
-              {/* Cloud Status Cards */}
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.4 }}
-                className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12"
-              >
-                <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-xl p-6">
-                  <div className="text-3xl mb-2">⚡</div>
-                  <div className="text-lg font-semibold text-white">AWS EKS</div>
-                  <div className="text-sm text-white/60">{cloudStats.eks.status}</div>
-                  <div className="text-2xl font-bold text-orange-400">{cloudStats.eks.pods} pods</div>
-                  <div className="text-sm text-white/60">{cloudStats.eks.nodes} nodes</div>
-                </div>
-                
-                <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-xl p-6">
-                  <div className="text-3xl mb-2">🌐</div>
-                  <div className="text-lg font-semibold text-white">Azure AKS</div>
-                  <div className="text-sm text-white/60">{cloudStats.aks.status}</div>
-                  <div className="text-2xl font-bold text-blue-400">{cloudStats.aks.pods} pods</div>
-                  <div className="text-sm text-white/60">{cloudStats.aks.nodes} nodes</div>
-                </div>
-                
-                <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-xl p-6">
-                  <div className="text-3xl mb-2">☁️</div>
-                  <div className="text-lg font-semibold text-white">Google GKE</div>
-                  <div className="text-sm text-white/60">{cloudStats.gke.status}</div>
-                  <div className="text-2xl font-bold text-green-400">{cloudStats.gke.pods} pods</div>
-                  <div className="text-sm text-white/60">{cloudStats.gke.nodes} nodes</div>
-                </div>
-                
-                <div className="backdrop-blur-md bg-white/10 border border-white/20 rounded-xl p-6">
-                  <div className="text-3xl mb-2">🚀</div>
-                  <div className="text-lg font-semibold text-white">Services</div>
-                  <div className="text-sm text-white/60">Available</div>
-                  <div className="text-2xl font-bold text-yellow-400">{cloudStats.services}+</div>
-                  <div className="text-sm text-white/60">cloud services</div>
-                </div>
-              </motion.div>
-
-              {/* Architecture Overview */}
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.5 }}
-                className="backdrop-blur-md bg-white/5 border border-white/10 rounded-xl p-8 mb-12"
-              >
-                <h3 className="text-2xl font-bold text-white mb-6">Cloud-Native Architecture</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 text-sm">
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🗂️</div>
-                    <div className="font-semibold text-white">ArgoCD</div>
-                    <div className="text-white/60">GitOps</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🕸️</div>
-                    <div className="font-semibold text-white">Istio</div>
-                    <div className="text-white/60">Service Mesh</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">📊</div>
-                    <div className="font-semibold text-white">Grafana</div>
-                    <div className="text-white/60">Dashboards</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🔍</div>
-                    <div className="font-semibold text-white">Prometheus</div>
-                    <div className="text-white/60">Metrics</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">📈</div>
-                    <div className="font-semibold text-white">ELK Stack</div>
-                    <div className="text-white/60">Logging</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">💾</div>
-                    <div className="font-semibold text-white">Persistent</div>
-                    <div className="text-white/60">Storage</div>
-                  </div>
-                </div>
-              </motion.div>
-
-              {/* CTA Buttons */}
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.6 }}
-                className="flex flex-col sm:flex-row gap-4 justify-center"
-              >
-                <Link href="/services" className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300 transform hover:scale-105">
-                  Browse 360+ Services
-                </Link>
-                <Link href="/monitoring" className="backdrop-blur-md bg-white/10 border border-white/20 hover:bg-white/20 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300">
-                  View Monitoring
-                </Link>
-                <a href={CLOUD_APIS.grafana} target="_blank" rel="noopener noreferrer" className="backdrop-blur-md bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/30 hover:bg-orange-500/30 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-300">
-                  Open Grafana
-                </a>
-              </motion.div>
-
-              {/* Contact Form */}
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.7 }}
-              >
-                <ContactForm />
-              </motion.div>
+                <h3 className="text-xl font-semibold text-white mb-3">Easy Deployment</h3>
+                <p className="text-slate-400">Deploy applications with one-click across multiple clouds</p>
+              </div>
             </div>
           </div>
-
-          {/* Footer */}
-          <footer className="p-6 backdrop-blur-md bg-white/5 border-t border-white/20 text-center text-white/60">
-            <p>Multi-Cloud Kubernetes Platform • EKS • AKS • GKE • Istio Service Mesh • ArgoCD • Grafana • Prometheus • MongoDB • PostgreSQL</p>
-            <p className="text-sm mt-2">Real-time monitoring across {cloudStats.activeDeployments} active deployments</p>
-          </footer>
-        </div>
+        </section>
+        
+        {/* Services Preview */}
+        <section className="py-16 px-4 bg-slate-800/30">
+          <div className="max-w-7xl mx-auto text-center">
+            <h2 className="text-3xl md:text-4xl font-bold text-white mb-8">
+              Comprehensive Cloud Services
+            </h2>
+            <p className="text-lg text-slate-400 mb-12 max-w-3xl mx-auto">
+              Everything you need to build, deploy, and scale modern applications
+            </p>
+            
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[
+                { name: 'Compute', icon: '⚡', desc: 'Virtual machines and containers' },
+                { name: 'Storage', icon: '💾', desc: 'Scalable object and block storage' },
+                { name: 'Database', icon: '🗄️', desc: 'Managed database services' },
+                { name: 'Networking', icon: '🌐', desc: 'Global CDN and load balancing' },
+              ].map((service, index) => (
+                <div key={index} className="glass p-6 text-center hover:scale-105 transition-transform duration-200">
+                  <div className="text-4xl mb-4">{service.icon}</div>
+                  <h3 className="text-lg font-semibold text-white mb-2">{service.name}</h3>
+                  <p className="text-sm text-slate-400">{service.desc}</p>
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-12">
+              <Link href="/services" className="btn-primary">
+                Explore All Services
+              </Link>
+            </div>
+          </div>
+        </section>
       </div>
     </>
   )

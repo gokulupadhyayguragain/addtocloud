@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import { useAuth } from '../context/AuthContext';
+import ProtectedRoute from '../components/ProtectedRoute';
 
-export default function Monitoring() {
+function MonitoringContent() {
+  const { user, logout } = useAuth();
   const [alerts, setAlerts] = useState([
     { id: 1, severity: 'warning', service: 'Cloud Service', message: 'High CPU usage detected', time: '2 minutes ago' },
     { id: 2, severity: 'info', service: 'API Gateway', message: 'New deployment successful', time: '15 minutes ago' },
@@ -274,5 +277,13 @@ export default function Monitoring() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function Monitoring() {
+  return (
+    <ProtectedRoute>
+      <MonitoringContent />
+    </ProtectedRoute>
   );
 }

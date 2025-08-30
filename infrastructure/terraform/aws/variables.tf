@@ -129,3 +129,46 @@ variable "enable_database_encryption" {
   type        = bool
   default     = true
 }
+
+# EC2 Standalone Variables
+variable "ec2_public_key" {
+  description = "Public key for EC2 instances SSH access"
+  type        = string
+  default     = ""
+}
+
+variable "ec2_instance_type_frontend" {
+  description = "EC2 instance type for frontend"
+  type        = string
+  default     = "t3.small"
+}
+
+variable "ec2_instance_type_backend" {
+  description = "EC2 instance type for backend"
+  type        = string
+  default     = "t3.medium"
+}
+
+variable "ec2_instance_type_database" {
+  description = "EC2 instance type for database"
+  type        = string
+  default     = "t3.medium"
+}
+
+variable "ec2_root_volume_size" {
+  description = "Root volume size for EC2 instances in GB"
+  type        = number
+  default     = 20
+}
+
+variable "ec2_database_volume_size" {
+  description = "Root volume size for database EC2 instance in GB"
+  type        = number
+  default     = 30
+}
+
+variable "ec2_database_data_volume_size" {
+  description = "Data volume size for database storage in GB"
+  type        = number
+  default     = 100
+}

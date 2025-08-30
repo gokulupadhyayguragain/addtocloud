@@ -2,10 +2,13 @@ import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { getAllServices } from '../lib/services';
+import { useAuth } from '../context/AuthContext';
+import ProtectedRoute from '../components/ProtectedRoute';
 
 const API_BASE_URL = 'https://addtocloud-api-proxy.gocools.workers.dev';
 
-export default function Services() {
+function ServicesContent() {
+  const { user, logout } = useAuth();
   const [services, setServices] = useState([]);
   const [filteredServices, setFilteredServices] = useState([]);
   const [selectedProvider, setSelectedProvider] = useState('all');
@@ -289,5 +292,13 @@ export default function Services() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function Services() {
+  return (
+    <ProtectedRoute>
+      <ServicesContent />
+    </ProtectedRoute>
   );
 }
